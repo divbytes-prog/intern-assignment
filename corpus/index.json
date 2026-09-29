@@ -1,0 +1,6 @@
+[
+  {"file": "path-parameters.md", "title": "FastAPI path parameters", "url": "https://fastapi.tiangolo.com/tutorial/path-params/"},
+  {"file": "request-body.md", "title": "FastAPI request body", "url": "https://fastapi.tiangolo.com/tutorial/body/"},
+  {"file": "dependencies.md", "title": "FastAPI dependencies", "url": "https://fastapi.tiangolo.com/tutorial/dependencies/"},
+  {"file": "response-model.md", "title": "FastAPI response model", "url": "https://fastapi.tiangolo.com/tutorial/response-model/"}
+]
