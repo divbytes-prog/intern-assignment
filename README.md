@@ -216,7 +216,9 @@ server-side requests. `/feedback` accepts `up` or `down` for a known
   total retrieval attempts. This makes the decision inspectable but costs more
   calls and may misclassify a borderline chunk.
 - **Grounding:** Generation sees only graded chunks and must return inline
-  source markers. The graph checks marker validity, then an independent LLM
+  source markers. If a model lists valid citations but omits the inline syntax,
+  one model retry can repair the citation placement. The graph checks marker
+  validity, then an independent LLM
   check evaluates whether every claim and citation is supported. Failure
   causes abstention. The support checker reduces risk but can still make
   errors; it is not a formal proof.

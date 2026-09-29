@@ -81,6 +81,37 @@ def test_invalid_model_citations_do_not_leak():
     assert result["status"] == "insufficient_context"
 
 
+def test_missing_inline_markers_get_one_model_repair():
+    class OmittedInline(FakeLLM):
+        calls = 0
+
+        def json(self, system, user):
+            if "Answer ONLY" in system:
+                return {"answer": "Declare item_id: int on the route function.", "citations": ["S1"]}
+            if "Each factual claim in answer MUST" in system:
+                self.calls += 1
+                return {"answer": "Declare item_id: int on the route function [S1].",
+                        "citations": ["S1"]}
+            return super().json(system, user)
+
+    llm = OmittedInline()
+    result = RAGWorkflow(FakeStore([CHUNK]), llm).invoke("How do I validate item_id?")
+    assert result["status"] == "answered"
+    assert llm.calls == 1
+
+
+def test_unrepaired_inline_markers_still_abstain():
+    class OmittedInline(FakeLLM):
+        def json(self, system, user):
+            if "Answer ONLY" in system or "Each factual claim in answer MUST" in system:
+                return {"answer": "Declare item_id: int on the route function.", "citations": ["S1"]}
+            return super().json(system, user)
+
+    result = RAGWorkflow(FakeStore([CHUNK]), OmittedInline()).invoke("How do I validate item_id?")
+    assert result["status"] == "insufficient_context"
+    assert result["failure_reason"] == "invalid_citations_or_empty_answer"
+
+
 def test_malformed_citation_list_abstains_instead_of_crashing():
     class BadLLM(FakeLLM):
         def json(self, system, user):

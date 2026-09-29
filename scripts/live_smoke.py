@@ -32,9 +32,10 @@ def main() -> None:
 
             def observed_json(system: str, user: str) -> dict:
                 result = original_json(system, user)
-                if "Answer ONLY" in system:
+                if "Answer ONLY" in system or "Each factual claim in answer MUST" in system:
                     answer = result.get("answer")
-                    print(f"Generation shape: keys={list(result)}, "
+                    stage = "repair" if "Each factual claim in answer MUST" in system else "initial"
+                    print(f"Generation shape ({stage}): keys={list(result)}, "
                           f"answer_type={type(answer).__name__}, "
                           f"markers={re.findall(r'\[(S\d+)\]', answer) if isinstance(answer, str) else []}, "
                           f"citations_type={type(result.get('citations')).__name__}, "
