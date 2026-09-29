@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -78,7 +79,7 @@ def main() -> None:
         raise SystemExit("GROQ_API_KEY is required for the live evaluation")
     os.environ["AI_PROVIDER"] = "groq"
     os.environ["EMBEDDING_PROVIDER"] = "local"
-    os.environ["RAG_MAX_RETRIES"] = "0"
+    os.environ.pop("RAG_MAX_RETRIES", None)  # Use the application default retry policy.
     os.environ.pop("TAVILY_API_KEY", None)
 
     cases = load_cases(Path(args.cases))
@@ -98,7 +99,18 @@ def main() -> None:
                 session_name = case.get("session")
                 if session_name and session_name in sessions:
                     payload["session_id"] = sessions[session_name]
-                response = client.post("/query", json=payload)
+                response = None
+                for request_attempt, delay in enumerate((0, 5, 15)):
+                    if delay:
+                        time.sleep(delay)
+                    response = client.post("/query", json=payload)
+                    if response.status_code not in {429, 502}:
+                        break
+                    print(
+                        f"EVAL {case['id']}: transient HTTP {response.status_code}; "
+                        f"retry {request_attempt + 1}/3",
+                        flush=True,
+                    )
                 if response.status_code != 200:
                     rows.append({
                         "id": case["id"], "expected_status": case["expected_status"],
