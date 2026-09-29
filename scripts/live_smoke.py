@@ -23,7 +23,9 @@ def main() -> None:
             document = Path("corpus/path-parameters.md")
             ingested = client.post("/ingest", files={"file":
                 (document.name, document.read_bytes(), "text/markdown")})
-            assert ingested.status_code == 201, f"Ingest failed: HTTP {ingested.status_code}"
+            assert ingested.status_code == 201, (
+                f"Ingest failed: HTTP {ingested.status_code}, {ingested.text[:400]}"
+            )
             listed = client.get("/documents")
             assert listed.status_code == 200 and listed.json()["documents"]
             question = "How does FastAPI validate an integer path parameter?"
