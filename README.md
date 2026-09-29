@@ -252,6 +252,22 @@ handling, and a complete local API-to-Chroma flow with only external
 embedding/model calls stubbed. Tests do not claim live provider availability.
 For a live smoke test, seed the corpus and call `/query` with the example above.
 
+### Credentialed live check on GitHub Actions
+
+The manual **Live provider smoke test** workflow runs actual Gemini embedding,
+ingestion, retrieval, grading, answer generation, support checking, feedback,
+and a session follow-up. If the optional Tavily key is present, it also makes a
+real web-search request and checks the returned official hosts. It waits between
+the two model questions to respect a small per-minute free-tier quota.
+
+Add `GEMINI_API_KEY` under repository **Settings → Secrets and variables →
+Actions → New repository secret**, then open **Actions → Live provider smoke
+test → Run workflow**. Optionally add `TAVILY_API_KEY` as another secret.
+Read the result in the workflow job; the script prints only pass/fail stages,
+not keys or generated answer text. This workflow is manual, so routine pushes
+do not consume API quota. It does not replace the local app setup or a visual
+review of the Streamlit UI.
+
 ## Repository layout
 
 ```text
