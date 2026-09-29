@@ -30,7 +30,9 @@ def main() -> None:
                     grades = result.get("grades")
                     summary = ({str(key): str(value)[:12] for key, value in grades.items()}
                                if isinstance(grades, dict) else type(grades).__name__)
-                    print(f"Grading decision: {summary}", flush=True)
+                    types = {key: type(value).__name__ for key, value in result.items()}
+                    print(f"Grading decision: keys={list(result)}, grades={summary}, "
+                          f"value_types={types}", flush=True)
                 return result
 
             llm.json = observed_json
