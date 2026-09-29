@@ -6,9 +6,10 @@
 
 ![Technical Documentation Assistant walkthrough](docs/demo.gif)
 
-The short walkthrough is generated deterministically from the current browser
-UI copy by `scripts/make_demo_gif.py`. It highlights the normal reviewer flow:
-ask a question, inspect cited evidence, and open the compact pipeline trace.
+The short walkthrough is committed as a lightweight repository asset and can be
+regenerated with `scripts/make_demo_gif.py` after installing Pillow. It highlights
+the normal reviewer flow: ask a question, inspect cited evidence, and open the
+compact pipeline trace.
 
 A small, self-corrective RAG service for technical documentation. Built for the
 Express Analytics AI/ML Engineer Intern assignment. It indexes four original
@@ -221,13 +222,18 @@ The repository includes a small human-authored evaluation set in
 `evaluation/cases.json`. It checks answerability, expected source selection,
 grounded citations, follow-up memory, and abstention on an out-of-domain
 question. `scripts/evaluate.py` runs those cases against the real application
-with a fresh local Chroma index. The **Live RAG evaluation** GitHub Actions
-workflow uses the configured Groq secret and publishes the generated Markdown
-report as an artifact.
+with a fresh local Chroma index and the configured Groq model:
 
-This is deliberately a compact regression/evaluation set rather than a claim
-of benchmark-level model accuracy. The committed `evaluation/latest.md`
-records the most recent reviewed live run.
+```bash
+python -m scripts.evaluate --output evaluation/latest.md
+```
+
+The checked-in `evaluation/latest.md` separates **verified evidence** from
+provider-dependent evaluation cases: it records the passing automated regression
+and credentialed live smoke checks already run for this repository, then describes
+the seven-case suite that can be regenerated with a Groq key. No unexecuted case is
+reported as a pass. This is deliberately a compact project regression/evaluation
+set rather than a claim of benchmark-level model accuracy.
 
 ## Design decisions and tradeoffs
 
