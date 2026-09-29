@@ -279,10 +279,10 @@ key to run live, and Groq model quotas may prevent a live demonstration.
 Tests mock external services, so they establish graph behavior without
 claiming live availability of either provider.
 
-With more time I would add a human-reviewed factual evaluation set, explicit
-document versioning, observability/cost metrics, OCR/PDF ingestion, and broader
-evaluation across documentation projects. This is a local single-process demo,
-not an authenticated public service.
+With more time I would expand the human-reviewed evaluation set, add explicit
+document versioning and observability/cost metrics, support OCR/PDF ingestion,
+and evaluate across more documentation projects. This is a local single-process
+demo, not an authenticated public service.
 
 ## Tests
 
