@@ -73,9 +73,27 @@
     let answerId = null;
     let sessionId = null;
     $('new-session').addEventListener('click', () => { sessionId = null; answerId = null; $('question').value = ''; $('answer').textContent = ''; $('sources').replaceChildren(); item($('sources'), 'Sources will appear after an answer.'); $('feedback').style.display = 'none'; $('feedback-status').textContent = ''; $('status').textContent = 'New conversation started.'; });
+    const errorMessages = {
+      quota_or_rate_limit: 'Model quota reached. Please try again later.',
+      invalid_api_key: 'The configured model API key is invalid.',
+      model_access_denied: 'The configured model does not allow this request.',
+      model_not_found: 'The configured model could not be found.',
+      provider_unavailable: 'The model provider is temporarily unavailable.',
+      invalid_model_json: 'The model returned an invalid response.',
+      retrieval_or_model_error: 'The retrieval or model request failed.'
+    };
     async function jsonResponse(response) {
-      const body = await response.json();
-      if (!response.ok) throw new Error(typeof body.detail === 'string' ? body.detail : (body.detail?.error || `Request failed (${response.status})`));
+      let body;
+      try { body = await response.json(); }
+      catch {
+        if (!response.ok) throw new Error(`Request failed (${response.status})`);
+        return {};
+      }
+      if (!response.ok) {
+        const detail = body?.detail;
+        const code = typeof detail === 'object' ? detail?.error : null;
+        throw new Error(typeof detail === 'string' ? detail : (errorMessages[code] || `Request failed (${response.status})`));
+      }
       return body;
     }
     function item(list, title, subtitle, url) {
@@ -109,7 +127,7 @@
         for (const source of data.sources) item($('sources'), `[${source.marker}] ${source.title}`, source.source, safeUrl(source.source));
         if (!data.sources.length) item($('sources'), 'No supporting source was found.');
         $('feedback').style.display = 'block';
-      } catch (error) { $('answer').textContent = error.message; $('answer').classList.add('error'); $('status').textContent = 'Please try again.'; }
+      } catch (error) { $('answer').textContent = error.message; $('answer').classList.add('error'); item($('sources'), 'No sources available because the request failed.'); $('status').textContent = 'Please try again.'; }
       finally { $('ask').disabled = false; }
     });
     $('feedback').addEventListener('click', async event => {

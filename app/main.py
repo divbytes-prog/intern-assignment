@@ -246,7 +246,10 @@ def create_app(service_factory=None) -> FastAPI:
                     raw = await upload.read(MAX_BYTES + 1)
                     if len(raw) > MAX_BYTES:
                         raise ValueError("Document exceeds the 1 MB limit")
-                    content = raw.decode("utf-8")
+                    try:
+                        content = raw.decode("utf-8")
+                    except UnicodeDecodeError as exc:
+                        raise ValueError("Uploaded file must contain valid UTF-8 text") from exc
                     if title.endswith(".html"):
                         soup = BeautifulSoup(content, "html.parser")
                         for tag in soup(["script", "style", "nav", "footer", "header"]):

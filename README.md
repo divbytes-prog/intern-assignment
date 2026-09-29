@@ -257,7 +257,11 @@ retries and abstention, malformed citation handling, support check, API
 validation, ingestion, feedback, session isolation, bounded history, web
 host filtering, fallback routing, repeated corpus seeding, safe provider error
 handling, and a complete local API-to-Chroma flow with only external
-embedding/model calls stubbed. Tests do not claim live provider availability.
+embedding/model calls stubbed. CI also installs the optional UI dependencies
+and uses Streamlit's native `AppTest` framework to exercise chat, citations,
+follow-up session reuse, upload refresh, feedback, new-conversation reset, and
+backend validation errors. These UI tests validate interaction behavior rather
+than pixel-perfect rendering. Tests do not claim live provider availability.
 For a live smoke test, seed the corpus and call `/query` with the example above.
 
 ### Credentialed live check on GitHub Actions

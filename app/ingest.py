@@ -13,7 +13,12 @@ MAX_BYTES = 1_000_000
 def fetch_document(url: str) -> tuple[str, str]:
     parsed = urlparse(url)
     host = (parsed.hostname or "").lower()
-    if parsed.scheme != "https" or host not in ALLOWED_HOSTS or parsed.username or parsed.password:
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Only HTTPS URLs on the supported official documentation hosts are allowed") from exc
+    if (parsed.scheme != "https" or host not in ALLOWED_HOSTS or parsed.username or parsed.password
+            or port not in {None, 443}):
         raise ValueError("Only HTTPS URLs on the supported official documentation hosts are allowed")
     with requests.get(url, timeout=15, stream=True, allow_redirects=False) as response:
         if 300 <= response.status_code < 400:

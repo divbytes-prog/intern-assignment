@@ -71,9 +71,14 @@ def test_query_ingest_documents_feedback():
 def test_rejects_unsafe_urls_and_file_types():
     with TestClient(create_app(lambda: FakeService())) as client:
         assert client.post("/ingest", json={"url": "http://127.0.0.1/admin"}).status_code == 422
+        assert client.post("/ingest", json={"url": "https://fastapi.tiangolo.com:444/tutorial/"}).status_code == 422
+        assert client.post("/ingest", json={"url": "https://fastapi.tiangolo.com:notaport/tutorial/"}).status_code == 422
         assert client.post("/ingest", json=["not an object"]).status_code == 422
         assert client.post("/ingest", json={"url": 42}).status_code == 422
         assert client.post("/ingest", files={"file": ("data.pdf", b"%PDF", "application/pdf")}).status_code == 422
+        invalid_text = client.post("/ingest", files={"file": ("bad.md", b"\xff\xfe", "text/markdown")})
+        assert invalid_text.status_code == 422
+        assert invalid_text.json()["detail"] == "Uploaded file must contain valid UTF-8 text"
 
 
 def test_real_local_index_with_stubbed_provider(tmp_path, monkeypatch):
