@@ -1,5 +1,7 @@
 # Technical Documentation Assistant
 
+[![Tests](https://github.com/divbytes-prog/intern-assignment/actions/workflows/tests.yml/badge.svg)](https://github.com/divbytes-prog/intern-assignment/actions/workflows/tests.yml)
+
 A small, self-corrective RAG service for technical documentation. Built for the
 Express Analytics AI/ML Engineer Intern assignment. It indexes four original
 FastAPI study notes, retrieves semantically similar chunks with Chroma, grades

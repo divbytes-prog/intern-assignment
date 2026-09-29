@@ -81,6 +81,27 @@ def test_rejects_unsafe_urls_and_file_types():
         assert invalid_text.json()["detail"] == "Uploaded file must contain valid UTF-8 text"
 
 
+def test_rejects_malformed_empty_and_oversized_ingest_payloads():
+    with TestClient(create_app(lambda: FakeService())) as client:
+        malformed = client.post(
+            "/ingest", content=b"{", headers={"content-type": "application/json"}
+        )
+        assert malformed.status_code == 422
+        assert malformed.json()["detail"] == "Request body must be valid JSON"
+
+        empty = client.post(
+            "/ingest", files={"file": ("empty.md", b"", "text/markdown")}
+        )
+        assert empty.status_code == 422
+        assert empty.json()["detail"] == "Document is empty"
+
+        oversized = client.post(
+            "/ingest", files={"file": ("large.md", b"x" * 1_000_001, "text/markdown")}
+        )
+        assert oversized.status_code == 422
+        assert oversized.json()["detail"] == "Document exceeds the 1 MB limit"
+
+
 def test_real_local_index_with_stubbed_provider(tmp_path, monkeypatch):
     from app import main, store
     from tests.test_store import FakeEmbedding

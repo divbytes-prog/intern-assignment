@@ -222,7 +222,10 @@ def create_app(service_factory=None) -> FastAPI:
         service = request.app.state.service
         try:
             if "application/json" in content_type:
-                data = await request.json()
+                try:
+                    data = await request.json()
+                except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    raise ValueError("Request body must be valid JSON") from exc
                 if not isinstance(data, dict) or not isinstance(data.get("url"), str):
                     raise ValueError("Provide a JSON object with a documentation URL")
                 url = data["url"].strip()
