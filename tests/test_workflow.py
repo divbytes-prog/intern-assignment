@@ -106,6 +106,21 @@ def test_mixed_relevance_filters_irrelevant_chunk():
     assert len(result["relevant"]) == 1
 
 
+def test_flat_json_grades_from_gemini_are_accepted():
+    class FlatLLM(FakeLLM):
+        def json(self, system, user):
+            if "relevance grader" in system:
+                return {"0": False, "1": True}
+            return super().json(system, user)
+
+    irrelevant = dict(CHUNK, id="other:0", text="unrelated weather data")
+    result = RAGWorkflow(FakeStore([irrelevant, CHUNK]), FlatLLM()).invoke(
+        "How do I validate item_id?"
+    )
+    assert result["status"] == "answered"
+    assert [source["chunk_id"] for source in result["sources"]] == ["one:0"]
+
+
 def test_grading_multiple_chunks_uses_one_model_call():
     class CountingLLM(FakeLLM):
         grade_calls = 0

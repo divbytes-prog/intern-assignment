@@ -92,7 +92,9 @@ class RAGWorkflow:
             "Mark true only if that excerpt helps answer the question.",
             f"QUESTION:\n{state['standalone_question']}\n\nEXCERPTS:\n{excerpts}",
         )
-        grades = result.get("grades", {})
+        # Some JSON-mode models flatten the requested wrapper and return
+        # {"0": true, "1": false} directly. Both forms are unambiguous.
+        grades = result.get("grades", result)
         if not isinstance(grades, dict):
             grades = {}
         return {"relevant": [chunk for i, chunk in enumerate(state["retrieved"])
