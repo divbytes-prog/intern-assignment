@@ -27,7 +27,19 @@ def request(method: str, path: str, **kwargs):
         status = getattr(exc.response, "status_code", None)
         if status == 429:
             raise RuntimeError("Model quota reached. Wait and try again.") from exc
-        raise RuntimeError(f"API request failed ({status or 'connection'}). Is FastAPI running?") from exc
+        if exc.response is not None:
+            try:
+                body = exc.response.json()
+                detail = body.get("detail") if isinstance(body, dict) else None
+                if isinstance(detail, str):
+                    raise RuntimeError(detail) from exc
+                if isinstance(detail, dict) and isinstance(detail.get("error"), str):
+                    raise RuntimeError(detail["error"].replace("_", " ")) from exc
+            except ValueError:
+                pass
+        if status:
+            raise RuntimeError(f"API request failed ({status}).") from exc
+        raise RuntimeError("Could not reach FastAPI. Is the API running?") from exc
 
 
 def show_answer(message: dict):
@@ -46,6 +58,8 @@ with st.sidebar:
         st.session_state.session_id = None
         st.session_state.messages = []
         st.rerun()
+    if notice := st.session_state.pop("upload_notice", None):
+        st.success(notice)
     st.subheader("Indexed documents")
     try:
         for doc in request("GET", "/documents")["documents"]:
@@ -56,7 +70,8 @@ with st.sidebar:
     if file and st.button("Index file"):
         try:
             request("POST", "/ingest", files={"file": (file.name, file.getvalue())})
-            st.success("Document indexed. You can ask about it now.")
+            st.session_state.upload_notice = "Document indexed. You can ask about it now."
+            st.rerun()
         except RuntimeError as exc:
             st.error(str(exc))
 
