@@ -146,7 +146,8 @@ def main() -> None:
                     f"EVAL {case['id']}: {'PASS' if row['passed'] else 'FAIL'} "
                     f"status={row['status']} source_ok={source_ok} "
                     f"grounded={grounded_ok} attempts={result.get('retrieval_attempts')} "
-                    f"mode={result.get('retrieval_mode')}",
+                    f"mode={result.get('retrieval_mode')} reason={result.get('failure_reason')} "
+                    f"trace={result.get('trace')}",
                     flush=True,
                 )
 
