@@ -9,7 +9,8 @@
 The short walkthrough is committed as a lightweight repository asset and can be
 regenerated with `scripts/make_demo_gif.py` after installing Pillow. It highlights
 the normal reviewer flow: ask a question, inspect cited evidence, and open the
-compact pipeline trace.
+compact pipeline trace. The trace exposes only pipeline metadata (retrieval,
+grading, citations, and verification), not hidden model reasoning.
 
 A small, self-corrective RAG service for technical documentation. Built for the
 Express Analytics AI/ML Engineer Intern assignment. It indexes four original
