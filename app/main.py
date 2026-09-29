@@ -10,6 +10,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from starlette.datastructures import UploadFile
 
@@ -17,6 +18,8 @@ from app.ingest import MAX_BYTES, fetch_document
 from app.llm import LLM
 from app.store import DocumentStore
 from app.workflow import RAGWorkflow
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 
 class QueryInput(BaseModel):

@@ -2,11 +2,14 @@
 import json
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 from app.store import DocumentStore
 
 
 def main() -> None:
+    root = Path(__file__).resolve().parents[1]
+    load_dotenv(root / ".env")
     provider = os.getenv("AI_PROVIDER", "gemini").lower()
     if provider not in {"gemini", "openai"}:
         raise SystemExit("AI_PROVIDER must be gemini or openai")
@@ -14,7 +17,6 @@ def main() -> None:
     key = os.getenv(key_name)
     if not key:
         raise SystemExit(f"Set {key_name} first")
-    root = Path(__file__).resolve().parents[1]
     model = (os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-2") if provider == "gemini"
              else os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"))
     store = DocumentStore(Path(os.getenv("RAG_DATA_DIR", root / "data")), key,

@@ -46,10 +46,9 @@ python -m pip install -r requirements.txt
 cp .env.example .env           # Windows: copy .env.example .env
 ```
 
-Set `GEMINI_API_KEY` in your environment. To load a locally edited `.env` file
-on bash, run `set -a; source .env; set +a`. The application deliberately does
-not read or commit a key automatically. On Windows PowerShell:
-`$env:GEMINI_API_KEY="your-key"`. Keep your key out of GitHub and chat messages.
+Replace the placeholder `GEMINI_API_KEY` in the local `.env` file with your new
+Gemini API key. Both the seed script and application load `.env` automatically.
+The `.env` file is excluded from Git; keep your key out of GitHub and chat messages.
 
 For OpenAI instead, set `AI_PROVIDER=openai`, `OPENAI_API_KEY`, and optionally
 `OPENAI_CHAT_MODEL` and `OPENAI_EMBEDDING_MODEL`. Re-index into an empty `data`
