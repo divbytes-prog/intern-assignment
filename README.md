@@ -260,8 +260,8 @@ The manual **Live provider smoke test** workflow runs actual Gemini embedding,
 ingestion, retrieval, grading, answer generation, support checking, feedback,
 and a session follow-up. If the optional Tavily key is present, it also makes a
 real web-search request and checks the returned official hosts before the model
-questions. It waits between
-the two model questions to respect a small per-minute free-tier quota.
+questions. It spaces model calls by 20 seconds and waits between the two
+questions to respect a small per-minute free-tier quota.
 
 Add `GEMINI_API_KEY` under repository **Settings → Secrets and variables →
 Actions → New repository secret**, then open **Actions → Live provider smoke

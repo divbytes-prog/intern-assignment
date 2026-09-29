@@ -29,8 +29,15 @@ def main() -> None:
             # Report only model decision shapes, never questions, excerpts, or keys.
             llm = client.app.state.service.workflow.llm
             original_json = llm.json
+            last_model_call = 0.0
 
             def observed_json(system: str, user: str) -> dict:
+                nonlocal last_model_call
+                # Leave headroom under the key's observed five-request/minute limit.
+                remaining = 20.0 - (time.monotonic() - last_model_call)
+                if remaining > 0:
+                    time.sleep(remaining)
+                last_model_call = time.monotonic()
                 result = original_json(system, user)
                 if "relevance grader" in system:
                     grades = result.get("grades")
