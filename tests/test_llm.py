@@ -44,3 +44,22 @@ def test_gemini_retries_temporary_provider_failure(monkeypatch):
     assert client.json("Return JSON", "ping") == {"ok": True}
     assert len(calls) == 3
     assert waits == [2, 4]
+
+
+def test_groq_uses_compatible_json_api(monkeypatch):
+    settings = {}
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            settings["request"] = kwargs
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='{"ok": true}'))])
+
+    def client(**kwargs):
+        settings["client"] = kwargs
+        return SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions()))
+
+    monkeypatch.setattr(module, "OpenAI", client)
+    llm = module.LLM("test-key", "openai/gpt-oss-20b", "groq")
+    assert llm.json("Return JSON", "ping") == {"ok": True}
+    assert settings["client"]["base_url"] == "https://api.groq.com/openai/v1"
+    assert settings["request"]["response_format"] == {"type": "json_object"}

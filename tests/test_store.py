@@ -59,3 +59,21 @@ def test_embedding_two_returns_one_vector_per_chunk(monkeypatch):
     assert module.Embeddings("test", "gemini-embedding-2", "gemini").embed(["a", "b"]) == [
         [1.0, 0.0], [0.0, 1.0],
     ]
+
+
+def test_local_embeddings_need_no_provider_key(monkeypatch):
+    import fastembed
+    import numpy as np
+
+    class LocalModel:
+        def __init__(self, *, model_name):
+            assert model_name == "BAAI/bge-small-en-v1.5"
+
+        def embed(self, texts):
+            for i, _ in enumerate(texts):
+                yield np.array([float(i), 1.0])
+
+    monkeypatch.setattr(fastembed, "TextEmbedding", LocalModel)
+    assert module.Embeddings(None, "BAAI/bge-small-en-v1.5", "local").embed(["one", "two"]) == [
+        [0.0, 1.0], [1.0, 1.0],
+    ]

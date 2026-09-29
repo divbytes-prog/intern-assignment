@@ -20,7 +20,7 @@ additional Markdown, text, HTML, or supported documentation URLs.
 | LangGraph StateGraph | Query analysis, Chroma retrieval, LLM document grading, bounded rewrite, generation, support verification, and fallback in `app/workflow.py` |
 | Grade every chunk and filter irrelevant ones | One JSON model request returns a judgment keyed by each retrieved chunk ID; missing judgments fail closed |
 | Conditional routing and retry limit | Relevant chunks go to generation; otherwise rewrite and re-retrieve at most twice, then abstain |
-| Ingestion, chunking, embeddings, vector store | `scripts/seed.py`, `app/ingest.py`, and `app/store.py`; provider embeddings and persistent Chroma |
+| Ingestion, chunking, embeddings, vector store | `scripts/seed.py`, `app/ingest.py`, and `app/store.py`; local FastEmbed vectors and persistent Chroma |
 | Four API endpoints | `POST /query`, `POST /ingest`, `GET /documents`, `POST /feedback` |
 | Grounded response with citations | Generation uses only graded chunks; source markers are checked and a separate LLM node reviews support |
 | Hallucination check (bonus) | Citation marker validation plus a separate answer-support LLM node; unsupported answers abstain |
@@ -51,19 +51,19 @@ The `RAGState` in `app/workflow.py` carries the original and resolved follow-up 
 search query, query type, attempt count, retrieved chunks, filtered relevant
 chunks, answer, citations, verification result, and status. One initial local retrieval plus two retries
 is the default maximum. A failed relevance check never reaches generation.
-The default Gemini workflow uses four chat calls on a successful
+The default Groq workflow uses four chat calls on a successful
 single-pass question: query analysis, batch grading, answer generation, and
-support checking. A short per-minute quota error is retried once after the
-provider's suggested delay. Other provider quota limits return HTTP 429, and
-additional retries can cost more requests.
+support checking. The optional Gemini provider retries one short per-minute
+quota error after the suggested delay. Other provider quota limits return
+HTTP 429, and additional retries can cost more requests.
 
 ## Requirements and setup
 
 - Python 3.11 or newer
-- A free-tier Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey)
-  for `gemini-3-flash-preview` and `gemini-embedding-2` (subject to Google's
-  current free-tier availability and rate limits). An OpenAI API key is optional.
-- Internet for embedding/model calls; the Chroma index itself is local
+- A Groq API key from [Groq Console](https://console.groq.com/keys) for
+  `openai/gpt-oss-20b` (subject to your free-plan limits)
+- Internet for the first local embedding-model download and Groq calls;
+  subsequent embedding calculations and the Chroma index are local
 
 ```bash
 python -m venv .venv
@@ -72,15 +72,18 @@ python -m pip install -r requirements.txt
 cp .env.example .env           # Windows: copy .env.example .env
 ```
 
-Replace the placeholder `GEMINI_API_KEY` in the local `.env` file with your new
-Gemini API key. Both the seed script and application load `.env` automatically.
+Replace the placeholder `GROQ_API_KEY` in the local `.env` file with your
+Groq API key. Both the seed script and application load `.env` automatically.
 The `.env` file is excluded from Git; keep your key out of GitHub and chat messages.
 
-For OpenAI instead, set `AI_PROVIDER=openai`, `OPENAI_API_KEY`, and optionally
-`OPENAI_CHAT_MODEL` and `OPENAI_EMBEDDING_MODEL`. Re-index into an empty `data`
-directory when changing embedding providers or models; their vector dimensions
-may differ. Gemini's free tier has per-project quotas, and some keys/projects
-may have different model availability; check your AI Studio rate-limit page.
+Groq supplies the language model; FastEmbed's `BAAI/bge-small-en-v1.5` supplies
+384-dimensional embeddings on your machine. You can optionally set
+`AI_PROVIDER=gemini` or `AI_PROVIDER=openai` with the corresponding key.
+`EMBEDDING_PROVIDER` can separately be `local`, `gemini`, or `openai`.
+Use a **fresh `RAG_DATA_DIR`** when changing embedding models or providers;
+vector dimensions and meaning may differ. The new default `./data-local`
+keeps the old Gemini index in `./data` separate. The first seed downloads
+the local model once (about 67 MB); later runs reuse the cache.
 
 ```bash
 python -m scripts.seed
@@ -88,7 +91,7 @@ uvicorn app.main:app --reload
 ```
 
 Open `http://127.0.0.1:8000/docs` for the interactive API. The Chroma index
-and SQLite feedback store live in `./data` and persist across restarts. Seed
+and SQLite feedback store live in `./data-local` and persist across restarts. Seed
 is idempotent: it replaces chunks with the same source URL.
 
 For the visual interface, open `http://127.0.0.1:8000/`. It calls the same API
@@ -102,7 +105,7 @@ issues:
 py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 Copy-Item .env.example .env
-# Edit .env locally and replace only the GEMINI_API_KEY placeholder.
+# Edit .env locally and replace the GROQ_API_KEY placeholder.
 .\.venv\Scripts\python.exe -m scripts.seed
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
 ```
@@ -202,11 +205,11 @@ server-side requests. `/feedback` accepts `up` or `down` for a known
   statements and adjacent headings mostly together and avoids excessive
   duplication on short notes. A more complex corpus would benefit from
   Markdown-aware section paths and token-based chunking.
-- **Embeddings:** Gemini `gemini-embedding-2` by default, with explicit vectors
-  stored in local Chroma. Each chunk is passed as a separate Gemini `Content`
-  object so Embedding 2 returns a distinct vector per chunk; optional OpenAI
-  `text-embedding-3-small`. Free-tier
-  quotas vary and neither provider key is included.
+- **Embeddings:** FastEmbed `BAAI/bge-small-en-v1.5` runs locally by default;
+  Chroma stores the resulting vectors. Its 384 dimensions and modest model
+  download make a small documentation corpus practical without an embedding
+  API quota. Gemini Embedding 2 and OpenAI embeddings remain optional.
+  Each chunk passed to Gemini Embedding 2 is a separate `Content` object.
 - **Grading and correction:** One LLM call grades every retrieved chunk
   independently by ID. This reduces free-tier requests. If
   none is relevant, the graph rewrites and retrieves again, for at most three
@@ -231,7 +234,7 @@ useful than merely asking the generator to be careful. A bounded rewrite loop
 allows one recovery path without trapping a request indefinitely.
 
 All four PDF bonus items are implemented. The Tavily path needs a separate
-key to run live, and model/provider quotas may prevent a live demonstration.
+key to run live, and Groq model quotas may prevent a live demonstration.
 Tests mock external services, so they establish graph behavior without
 claiming live availability of either provider.
 
@@ -256,21 +259,19 @@ For a live smoke test, seed the corpus and call `/query` with the example above.
 
 ### Credentialed live check on GitHub Actions
 
-The manual **Live provider smoke test** workflow runs actual Gemini embedding,
+The manual **Live provider smoke test** workflow runs actual local embedding,
 ingestion, retrieval, grading, answer generation, support checking, feedback,
 and a session follow-up. If the optional Tavily key is present, it also makes a
 real web-search request and checks the returned official hosts before the model
-questions. It spaces model calls by 20 seconds and waits between the two
-questions to respect a small per-minute free-tier quota.
+questions. Groq provides the live JSON model calls.
 
-Add `GEMINI_API_KEY` under repository **Settings → Secrets and variables →
+Add `GROQ_API_KEY` under repository **Settings → Secrets and variables →
 Actions → New repository secret**, then open **Actions → Live provider smoke
 test → Run workflow**. Optionally add `TAVILY_API_KEY` as another secret.
-Read the result in the workflow job; the script prints pass/fail stages and
-grading response shapes, not keys, excerpts, or generated answer text. A
-`429 quota_or_rate_limit` means the key's model quota currently prevents a
-complete live run; check the project's limits in AI Studio and rerun when
-capacity is available. This workflow is manual, so routine pushes
+Read the result in the workflow job; the script prints pass/fail stages,
+not keys, excerpts, or generated answer text. A `429 quota_or_rate_limit`
+means the project's Groq quota currently prevents a complete live run;
+check its limits in Groq Console. This workflow is manual, so routine pushes
 do not consume API quota. It does not replace the local app setup or a visual
 review of the Streamlit UI.
 

@@ -16,9 +16,16 @@ class ModelResponseError(ValueError):
 
 
 class LLM:
-    def __init__(self, api_key: str, model: str, provider: str = "gemini"):
+    def __init__(self, api_key: str, model: str, provider: str = "groq"):
         self.provider = provider
-        self.client = genai.Client(api_key=api_key) if provider == "gemini" else OpenAI(api_key=api_key)
+        if provider == "gemini":
+            self.client = genai.Client(api_key=api_key)
+        elif provider == "groq":
+            self.client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
+        elif provider == "openai":
+            self.client = OpenAI(api_key=api_key)
+        else:
+            raise ValueError("AI_PROVIDER must be groq, gemini, or openai")
         self.model = model
 
     def json(self, system: str, user: str) -> dict:

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import os
 import tempfile
-import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -13,10 +12,11 @@ from app.web_search import TavilySearch
 
 
 def main() -> None:
-    if not os.getenv("GEMINI_API_KEY"):
-        raise SystemExit("GEMINI_API_KEY is required for this live smoke test")
-    os.environ["AI_PROVIDER"] = "gemini"
-    os.environ["RAG_MAX_RETRIES"] = "0"  # Conserve the free-tier model quota.
+    if not os.getenv("GROQ_API_KEY"):
+        raise SystemExit("GROQ_API_KEY is required for this live smoke test")
+    os.environ["AI_PROVIDER"] = "groq"
+    os.environ["EMBEDDING_PROVIDER"] = "local"
+    os.environ["RAG_MAX_RETRIES"] = "0"  # Keep the smoke test focused on a known answer.
     if os.getenv("TAVILY_API_KEY"):
         results = TavilySearch(os.environ["TAVILY_API_KEY"]).search("FastAPI path parameter validation")
         assert results, "Tavily returned no allowlisted documentation excerpts"
@@ -26,29 +26,6 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as directory:
         os.environ["RAG_DATA_DIR"] = directory
         with TestClient(create_app()) as client:
-            # Report only model decision shapes, never questions, excerpts, or keys.
-            llm = client.app.state.service.workflow.llm
-            original_json = llm.json
-            last_model_call = 0.0
-
-            def observed_json(system: str, user: str) -> dict:
-                nonlocal last_model_call
-                # Leave headroom under the key's observed five-request/minute limit.
-                remaining = 20.0 - (time.monotonic() - last_model_call)
-                if remaining > 0:
-                    time.sleep(remaining)
-                last_model_call = time.monotonic()
-                result = original_json(system, user)
-                if "relevance grader" in system:
-                    grades = result.get("grades")
-                    summary = ({str(key): str(value)[:12] for key, value in grades.items()}
-                               if isinstance(grades, dict) else type(grades).__name__)
-                    types = {key: type(value).__name__ for key, value in result.items()}
-                    print(f"Grading decision: keys={list(result)}, grades={summary}, "
-                          f"value_types={types}", flush=True)
-                return result
-
-            llm.json = observed_json
             document = Path("corpus/path-parameters.md")
             ingested = client.post("/ingest", files={"file":
                 (document.name, document.read_bytes(), "text/markdown")})
@@ -69,10 +46,8 @@ def main() -> None:
             assert answer["retrieval_mode"] == "local"
             feedback = client.post("/feedback", json={"answer_id": answer["answer_id"], "rating": "up"})
             assert feedback.status_code == 200
-            print("PASS: live embed, ingest, local retrieval, LLM grading, cited generation, support check, and feedback")
+            print("PASS: local embedding, ingest, retrieval, Groq grading, cited generation, support check, and feedback")
 
-            # The default free-tier Gemini model may permit only five calls per minute.
-            time.sleep(65)
             followup = client.post("/query", json={"question": "How does it report an invalid value?",
                                                    "session_id": answer["session_id"]})
             assert followup.status_code == 200, f"Follow-up failed: HTTP {followup.status_code}, {followup.json().get('detail')}"

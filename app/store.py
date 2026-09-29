@@ -13,13 +13,23 @@ from openai import OpenAI
 
 
 class Embeddings:
-    def __init__(self, api_key: str, model: str, provider: str):
+    def __init__(self, api_key: str | None, model: str, provider: str):
         self.provider = provider
         self.model = model
-        self.client = genai.Client(api_key=api_key) if provider == "gemini" else OpenAI(api_key=api_key)
+        if provider == "local":
+            from fastembed import TextEmbedding
+            self.client = TextEmbedding(model_name=model)
+        elif provider == "gemini":
+            self.client = genai.Client(api_key=api_key)
+        elif provider == "openai":
+            self.client = OpenAI(api_key=api_key)
+        else:
+            raise ValueError("Embedding provider must be local, gemini, or openai")
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        if self.provider == "gemini":
+        if self.provider == "local":
+            vectors = [vector.tolist() for vector in self.client.embed(texts)]
+        elif self.provider == "gemini":
             # Embedding 2 aggregates a plain list of strings into ONE vector.
             # Separate Content objects request one vector for each chunk.
             contents = ([types.Content(parts=[types.Part.from_text(text=text)]) for text in texts]
@@ -62,7 +72,8 @@ def split_markdown(text: str, max_chars: int = 1200, overlap: int = 160) -> list
 
 
 class DocumentStore:
-    def __init__(self, data_dir: Path, api_key: str, embedding_model: str, provider: str = "gemini"):
+    def __init__(self, data_dir: Path, api_key: str | None, embedding_model: str,
+                 provider: str = "local"):
         data_dir.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
         client = chromadb.PersistentClient(path=str(data_dir / "chroma"))
