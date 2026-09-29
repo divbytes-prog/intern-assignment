@@ -22,6 +22,26 @@ from app.workflow import RAGWorkflow
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 
+def query_error_detail(exc: Exception) -> dict:
+    """Return only safe diagnostic codes; provider messages can contain secrets."""
+    status = None
+    current: BaseException | None = exc
+    while current is not None:
+        code = getattr(current, "code", None) or getattr(current, "status_code", None)
+        if isinstance(code, int) and 400 <= code < 600:
+            status = code
+            break
+        current = current.__cause__
+    category = {
+        400: "invalid_model_request", 401: "invalid_api_key", 403: "model_access_denied",
+        404: "model_not_found", 429: "quota_or_rate_limit",
+    }.get(status)
+    if category is None:
+        category = ("provider_unavailable" if status and status >= 500 else
+                    "invalid_model_json" if isinstance(exc, ValueError) else "retrieval_or_model_error")
+    return {"error": category, "provider_status": status}
+
+
 class QueryInput(BaseModel):
     question: str = Field(min_length=3, max_length=1000)
 
@@ -96,7 +116,7 @@ def create_app(service_factory=None) -> FastAPI:
         try:
             result = request.app.state.service.workflow.invoke(data.question)
         except Exception as exc:
-            raise HTTPException(status_code=502, detail="Retrieval or model provider failed") from exc
+            raise HTTPException(status_code=502, detail=query_error_detail(exc)) from exc
         answer_id = str(uuid.uuid4())
         request.app.state.service.save_answer(answer_id, data.question)
         return {"answer_id": answer_id, "answer": result["answer"], "sources": result["sources"],

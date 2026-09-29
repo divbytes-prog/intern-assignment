@@ -1,7 +1,7 @@
 import sqlite3
 from fastapi.testclient import TestClient
 
-from app.main import Service, create_app
+from app.main import Service, create_app, query_error_detail
 from app.workflow import RAGWorkflow
 from tests.test_workflow import FakeLLM, FakeStore, CHUNK
 
@@ -73,3 +73,12 @@ def test_real_local_index_with_stubbed_provider(tmp_path, monkeypatch):
         assert response.json()["status"] == "answered"
         assert response.json()["sources"][0]["source"] == "upload:path.md"
         assert client.get("/documents").json()["documents"][0]["chunks"] == 1
+
+
+def test_provider_failure_diagnostics_do_not_include_secrets():
+    class ProviderError(Exception):
+        code = 429
+
+    detail = query_error_detail(ProviderError("secret key and request details"))
+    assert detail == {"error": "quota_or_rate_limit", "provider_status": 429}
+    assert "secret" not in str(detail)
