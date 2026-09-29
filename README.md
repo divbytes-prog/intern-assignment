@@ -3,12 +3,27 @@
 A small, self-corrective RAG service for technical documentation. Built for the
 Express Analytics AI/ML Engineer Intern assignment. It indexes four original
 FastAPI study notes, retrieves semantically similar chunks with Chroma, grades
-each retrieved chunk using an LLM, retries weak retrieval, and produces
-source-marked answers through FastAPI.
+every retrieved chunk using an LLM, retries weak retrieval, and produces
+source-marked answers through FastAPI. The local app also includes a small
+browser interface for asking questions, inspecting sources, uploading notes,
+and leaving feedback.
 
-The included corpus is paraphrased study notes with links to the [official
+The included corpus is original study notes with links to the [official
 FastAPI docs](https://fastapi.tiangolo.com/tutorial/). The API also accepts
 additional Markdown, text, HTML, or supported documentation URLs.
+
+## Assignment coverage
+
+| PDF requirement | Implementation |
+| --- | --- |
+| 3-5 technical documents | Four original FastAPI notes in `corpus/`, with an official URL for each |
+| LangGraph StateGraph | Query analysis, Chroma retrieval, LLM document grading, bounded rewrite, generation, support verification, and fallback in `app/workflow.py` |
+| Grade every chunk and filter irrelevant ones | One JSON model request returns a judgment keyed by each retrieved chunk ID; missing judgments fail closed |
+| Conditional routing and retry limit | Relevant chunks go to generation; otherwise rewrite and re-retrieve at most twice, then abstain |
+| Ingestion, chunking, embeddings, vector store | `scripts/seed.py`, `app/ingest.py`, and `app/store.py`; provider embeddings and persistent Chroma |
+| Four API endpoints | `POST /query`, `POST /ingest`, `GET /documents`, `POST /feedback` |
+| Grounded response with citations | Generation uses only graded chunks; source markers are checked and a separate LLM node reviews support |
+| Optional small interface | `GET /` serves a same-origin browser UI; `/docs` remains the interactive API |
 
 ## Architecture
 
@@ -30,10 +45,11 @@ The `RAGState` in `app/workflow.py` carries the original question, current
 search query, query type, attempt count, retrieved chunks, filtered relevant
 chunks, answer, citations, verification result, and status. One initial retrieval plus two retries
 is the default maximum. A failed relevance check never reaches generation.
-The default free-tier Gemini workflow uses four chat calls on a successful
+The default Gemini workflow uses four chat calls on a successful
 single-pass question: query analysis, batch grading, answer generation, and
 support checking. A short per-minute quota error is retried once after the
-provider's suggested delay. Other provider quota limits return HTTP 429.
+provider's suggested delay. Other provider quota limits return HTTP 429, and
+additional retries can cost more requests.
 
 ## Requirements and setup
 
@@ -68,6 +84,22 @@ uvicorn app.main:app --reload
 Open `http://127.0.0.1:8000/docs` for the interactive API. The Chroma index
 and SQLite feedback store live in `./data` and persist across restarts. Seed
 is idempotent: it replaces chunks with the same source URL.
+
+For the visual interface, open `http://127.0.0.1:8000/`. It calls the same API
+and does not place the provider key in the browser. If you edit any bundled
+note, run `python -m scripts.seed` again to replace its indexed chunks.
+
+On Windows PowerShell, the equivalent setup avoids activation-script policy
+issues:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
+# Edit .env locally and replace only the GEMINI_API_KEY placeholder.
+.\.venv\Scripts\python.exe -m scripts.seed
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
 
 ## API examples
 
@@ -110,6 +142,8 @@ curl -X POST http://127.0.0.1:8000/feedback \
 `/query` returns an explicit `insufficient_context` status and no sources
 when the graph cannot establish relevance after its bounded retries, when
 generation lacks valid citations, or when the support check rejects its claims.
+Input validation errors return HTTP 422. Provider quota exhaustion returns
+HTTP 429 with a safe category and provider status, without exposing key values.
 `/ingest` supports JSON URLs,
 multipart URL fields, or one .md/.txt/.html upload. It limits content to 1 MB
 and URL fetching to three official documentation hosts to avoid arbitrary
@@ -149,13 +183,14 @@ result might be about the wrong API; filtering it before generation is more
 useful than merely asking the generator to be careful. A bounded rewrite loop
 allows one recovery path without trapping a request indefinitely.
 
-The optional web-search fallback, conversation memory, and Streamlit/Gradio UI
-are not included. The assignment marks them as bonuses, and the core graph is
-kept small enough to inspect. The optional support-check node is included.
+The optional web-search fallback and conversation memory are not included.
+The optional support-check node and a dependency-free browser UI are included.
+The PDF marks these extras as bonuses; the core graph remains inspectable.
 
-With more time I would add a human-reviewed factual evaluation set, batched
-grading, explicit document versioning, observability/cost metrics, OCR/PDF
-ingestion, and a broader evaluation set with human-labeled questions.
+With more time I would add a human-reviewed factual evaluation set, explicit
+document versioning, observability/cost metrics, OCR/PDF ingestion, and broader
+evaluation across documentation projects. This is a local single-process demo,
+not an authenticated public service.
 
 ## Tests
 
@@ -165,10 +200,10 @@ pytest -q
 
 Tests cover the successful citation path, mixed relevance filtering, bounded
 retries and abstention, malformed citation handling, support check, API
-validation, ingestion, feedback, and a complete local API-to-Chroma flow with
-only the external embedding/model calls stubbed. They do not assert that a
-live provider key or external model is available. For a live smoke test, seed
-the corpus and call `/query` with the example above.
+validation, ingestion, feedback, repeated corpus seeding, safe provider error
+handling, and a complete local API-to-Chroma flow with only external
+embedding/model calls stubbed. Tests do not claim live provider availability.
+For a live smoke test, seed the corpus and call `/query` with the example above.
 
 ## Repository layout
 
@@ -178,6 +213,7 @@ app/workflow.py   LangGraph state, nodes, and conditional edges
 app/store.py      Chroma persistence and chunking
 app/llm.py        JSON model interface
 app/ingest.py     Bounded official-URL ingestion
+app/static/       Optional browser interface
 corpus/           Four original documentation notes and source manifest
 scripts/seed.py   Idempotent corpus indexer
 tests/            Graph and API behavior tests

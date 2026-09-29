@@ -80,6 +80,17 @@ def test_invalid_model_citations_do_not_leak():
     assert result["status"] == "insufficient_context"
 
 
+def test_malformed_citation_list_abstains_instead_of_crashing():
+    class BadLLM(FakeLLM):
+        def json(self, system, user):
+            if "Answer ONLY" in system:
+                return {"answer": "An unsupported claim [S1].", "citations": [{"marker": "S1"}]}
+            return super().json(system, user)
+
+    result = RAGWorkflow(FakeStore([CHUNK]), BadLLM()).invoke("How do I validate item_id?")
+    assert result["status"] == "insufficient_context"
+
+
 def test_mixed_relevance_filters_irrelevant_chunk():
     class MixedLLM(FakeLLM):
         def json(self, system, user):

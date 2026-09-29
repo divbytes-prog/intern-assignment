@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import json
 import sqlite3
 import threading
 import uuid
@@ -9,13 +10,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from starlette.datastructures import UploadFile
 
 from app.ingest import MAX_BYTES, fetch_document
-from app.llm import LLM
+from app.llm import LLM, ModelResponseError
 from app.store import DocumentStore
 from app.workflow import RAGWorkflow
 
@@ -38,12 +40,52 @@ def query_error_detail(exc: Exception) -> dict:
     }.get(status)
     if category is None:
         category = ("provider_unavailable" if status and status >= 500 else
-                    "invalid_model_json" if isinstance(exc, ValueError) else "retrieval_or_model_error")
+                    "invalid_model_json" if isinstance(exc, (json.JSONDecodeError, ModelResponseError))
+                    else "retrieval_or_model_error")
     return {"error": category, "provider_status": status}
 
 
 class QueryInput(BaseModel):
     question: str = Field(min_length=3, max_length=1000)
+
+    @field_validator("question")
+    @classmethod
+    def meaningful_question(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 3:
+            raise ValueError("Question must contain at least three non-space characters")
+        return value
+
+
+class SourceOutput(BaseModel):
+    marker: str
+    title: str
+    source: str
+    chunk_id: str
+
+
+class QueryOutput(BaseModel):
+    answer_id: str
+    answer: str
+    sources: list[SourceOutput]
+    status: str
+    retrieval_attempts: int
+
+
+class DocumentOutput(BaseModel):
+    document_id: str
+    source: str
+    title: str
+    chunks: int
+
+
+class DocumentsOutput(BaseModel):
+    documents: list[DocumentOutput]
+
+
+class FeedbackOutput(BaseModel):
+    saved: bool
+    answer_id: str
 
 
 class FeedbackInput(BaseModel):
@@ -107,11 +149,15 @@ def create_app(service_factory=None) -> FastAPI:
 
     api = FastAPI(title="Express Docs RAG", version="1.0.0", lifespan=lifespan)
 
+    @api.get("/", response_class=FileResponse, include_in_schema=False)
+    def home():
+        return FileResponse(Path(__file__).parent / "static" / "index.html", media_type="text/html")
+
     @api.get("/health")
     def health():
         return {"status": "ok"}
 
-    @api.post("/query")
+    @api.post("/query", response_model=QueryOutput)
     def query(data: QueryInput, request: Request):
         try:
             result = request.app.state.service.workflow.invoke(data.question)
@@ -124,14 +170,16 @@ def create_app(service_factory=None) -> FastAPI:
         return {"answer_id": answer_id, "answer": result["answer"], "sources": result["sources"],
                 "status": result["status"], "retrieval_attempts": result["attempts"]}
 
-    @api.post("/ingest", status_code=201)
+    @api.post("/ingest", status_code=201, response_model=DocumentOutput)
     async def ingest(request: Request):
         content_type = request.headers.get("content-type", "").lower()
         service = request.app.state.service
         try:
             if "application/json" in content_type:
                 data = await request.json()
-                url = data.get("url", "")
+                if not isinstance(data, dict) or not isinstance(data.get("url"), str):
+                    raise ValueError("Provide a JSON object with a documentation URL")
+                url = data["url"].strip()
                 content, title = fetch_document(url)
                 source = url
             elif "multipart/form-data" in content_type:
@@ -169,11 +217,11 @@ def create_app(service_factory=None) -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=502, detail="Could not fetch, embed, or index the document") from exc
 
-    @api.get("/documents")
+    @api.get("/documents", response_model=DocumentsOutput)
     def documents(request: Request):
         return {"documents": request.app.state.service.store.list_documents()}
 
-    @api.post("/feedback")
+    @api.post("/feedback", response_model=FeedbackOutput)
     def feedback(data: FeedbackInput, request: Request):
         if data.rating not in {"up", "down"}:
             raise HTTPException(status_code=422, detail="rating must be 'up' or 'down'")

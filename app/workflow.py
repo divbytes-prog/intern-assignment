@@ -111,7 +111,9 @@ class RAGWorkflow:
         claimed = result.get("citations")
         allowed = {c["marker"]: c for c in numbered}
         markers = set(re.findall(r"\[(S\d+)\]", answer))
-        if not answer or not isinstance(claimed, list) or not markers or markers != set(claimed) or not markers <= allowed.keys():
+        if (not answer or not isinstance(claimed, list) or
+                not all(isinstance(marker, str) for marker in claimed) or
+                not markers or markers != set(claimed) or not markers <= allowed.keys()):
             return self.fallback(state)
         return {"answer": answer, "sources": [{"marker": m, "title": allowed[m]["title"],
                  "source": allowed[m]["source"], "chunk_id": allowed[m]["id"]}

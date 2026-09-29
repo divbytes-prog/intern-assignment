@@ -36,9 +36,15 @@ class FakeService:
 
 def test_query_ingest_documents_feedback():
     with TestClient(create_app(lambda: FakeService())) as client:
+        landing = client.get("/")
+        assert landing.status_code == 200
+        assert "Ask the docs" in landing.text
         assert client.get("/health").json() == {"status": "ok"}
         bad = client.post("/query", json={"question": "x"})
         assert bad.status_code == 422
+        assert client.post("/query", json={"question": "   "}).status_code == 422
+        schema = client.get("/openapi.json").json()
+        assert schema["paths"]["/query"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]
         ingested = client.post("/ingest", files={"file": ("note.md", b"# A note\nSome text", "text/markdown")})
         assert ingested.status_code == 201
         assert client.get("/documents").json()["documents"][0]["title"] == "note.md"
@@ -54,6 +60,8 @@ def test_query_ingest_documents_feedback():
 def test_rejects_unsafe_urls_and_file_types():
     with TestClient(create_app(lambda: FakeService())) as client:
         assert client.post("/ingest", json={"url": "http://127.0.0.1/admin"}).status_code == 422
+        assert client.post("/ingest", json=["not an object"]).status_code == 422
+        assert client.post("/ingest", json={"url": 42}).status_code == 422
         assert client.post("/ingest", files={"file": ("data.pdf", b"%PDF", "application/pdf")}).status_code == 422
 
 

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Technical Documentation Assistant</title>
+  <style>
+    :root { color-scheme: light; font-family: Georgia, 'Times New Roman', serif; color: #18302e; background: #f4f5f0; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header { padding: 18px max(22px, calc((100vw - 1040px) / 2)); border-bottom: 1px solid #d9dfd7; background: #fff; }
+    .brand { font: 700 14px/1.2 system-ui, sans-serif; letter-spacing: .13em; text-transform: uppercase; }
+    main { max-width: 1040px; margin: 0 auto; padding: 54px 22px 84px; display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr); gap: 40px; }
+    h1 { font-size: clamp(36px, 5vw, 58px); line-height: 1.04; letter-spacing: -.04em; margin: 0 0 16px; }
+    h2 { font-size: 22px; margin: 0 0 18px; }
+    p { line-height: 1.6; }
+    .intro { max-width: 620px; color: #546864; margin: 0 0 32px; }
+    .panel { background: #fff; border: 1px solid #d9dfd7; border-radius: 15px; padding: 25px; box-shadow: 0 10px 32px rgba(24,48,46,.04); }
+    .eyebrow { font: 700 11px system-ui, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: #49685e; margin: 0 0 13px; }
+    label { display: block; font: 600 13px system-ui, sans-serif; margin-bottom: 10px; }
+    textarea, input { width: 100%; border: 1px solid #bdccc4; border-radius: 9px; padding: 12px 14px; font: 15px/1.5 system-ui, sans-serif; background: #fff; color: #18302e; }
+    textarea { min-height: 112px; resize: vertical; }
+    textarea:focus, input:focus { outline: 2px solid #478c72; outline-offset: 2px; }
+    button { cursor: pointer; border: 0; border-radius: 9px; background: #1e5e4b; color: white; padding: 12px 18px; font: 650 14px system-ui, sans-serif; }
+    button:hover { background: #174c3d; }
+    button:disabled { opacity: .55; cursor: wait; }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+    .muted, small { color: #63746f; font: 13px/1.5 system-ui, sans-serif; }
+    .answer { margin-top: 22px; min-height: 60px; white-space: pre-wrap; line-height: 1.65; }
+    .answer:empty { display: none; }
+    .error { color: #a13c2f; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { border-top: 1px solid #e4e9e3; padding: 12px 0; line-height: 1.4; overflow-wrap: anywhere; }
+    li:first-child { border-top: 0; }
+    a { color: #1a6b50; }
+    .source { display: block; margin-top: 4px; font: 12px/1.5 system-ui, sans-serif; color: #657770; }
+    .feedback { display: none; margin-top: 16px; }
+    .feedback button { background: #e8f0e9; color: #1b5847; padding: 8px 12px; }
+    .sidebar { display: grid; align-content: start; gap: 18px; }
+    .sidebar .panel { padding: 22px; }
+    .upload { border-top: 1px solid #e4e9e3; margin-top: 20px; padding-top: 20px; }
+    footer { max-width: 1040px; margin: 0 auto; padding: 0 22px 30px; color: #657770; font: 12px system-ui, sans-serif; }
+    @media (max-width: 760px) { main { grid-template-columns: 1fr; padding-top: 32px; gap: 22px; } }
+  </style>
+</head>
+<body>
+  <header><div class="brand">Express Docs · Research Demo</div></header>
+  <main>
+    <section>
+      <p class="eyebrow">Self-corrective RAG</p>
+      <h1>Ask the docs.<br>Check the source.</h1>
+      <p class="intro">Questions are answered from indexed FastAPI reference notes. The assistant checks document relevance and cites the passages it uses.</p>
+      <div class="panel">
+        <form id="question-form">
+          <label for="question">Your question</label>
+          <textarea id="question" required minlength="3" maxlength="1000" placeholder="How does FastAPI validate an integer path parameter?"></textarea>
+          <div class="row"><button id="ask" type="submit">Ask question</button><span class="muted" id="status" role="status"></span></div>
+        </form>
+        <div id="answer" class="answer" aria-live="polite"></div>
+        <div id="feedback" class="feedback"><small>Was this answer helpful?</small> <button type="button" data-rating="up">Yes</button> <button type="button" data-rating="down">No</button> <span id="feedback-status" class="muted"></span></div>
+      </div>
+    </section>
+    <aside class="sidebar">
+      <div class="panel"><p class="eyebrow">Evidence</p><h2>Sources</h2><ul id="sources"><li class="muted">Sources will appear after an answer.</li></ul></div>
+      <div class="panel"><p class="eyebrow">Corpus</p><h2>Indexed documents</h2><ul id="documents"><li class="muted">Loading documents…</li></ul>
+        <form id="upload-form" class="upload"><label for="file">Add a Markdown, text, or HTML file</label><input id="file" type="file" accept=".md,.txt,.html" required><div class="row"><button id="upload" type="submit">Index file</button><span class="muted" id="upload-status" role="status"></span></div></form>
+      </div>
+    </aside>
+  </main>
+  <footer>Local demo · <a href="/docs">API documentation</a> · Answers are limited to indexed documents.</footer>
+  <script>
+    const $ = id => document.getElementById(id);
+    let answerId = null;
+    async function jsonResponse(response) {
+      const body = await response.json();
+      if (!response.ok) throw new Error(typeof body.detail === 'string' ? body.detail : (body.detail?.error || `Request failed (${response.status})`));
+      return body;
+    }
+    function item(list, title, subtitle, url) {
+      const li = document.createElement('li');
+      const label = url ? document.createElement('a') : document.createElement('span');
+      label.textContent = title;
+      if (url) { label.href = url; label.target = '_blank'; label.rel = 'noopener noreferrer'; }
+      li.append(label);
+      if (subtitle) { const small = document.createElement('span'); small.className = 'source'; small.textContent = subtitle; li.append(small); }
+      list.append(li);
+    }
+    function safeUrl(value) { try { const url = new URL(value); return url.protocol === 'https:' ? url.href : null; } catch { return null; } }
+    async function loadDocuments() {
+      try {
+        const data = await jsonResponse(await fetch('/documents'));
+        $('documents').replaceChildren();
+        if (!data.documents.length) item($('documents'), 'No documents indexed yet', 'Run python -m scripts.seed, or upload a file.');
+        for (const doc of data.documents) item($('documents'), doc.title, `${doc.chunks} chunk${doc.chunks === 1 ? '' : 's'}`, safeUrl(doc.source));
+      } catch { $('documents').textContent = 'Could not load documents.'; }
+    }
+    $('question-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      $('ask').disabled = true; $('status').textContent = 'Checking the documents…';
+      $('answer').textContent = ''; $('answer').classList.remove('error');
+      $('sources').replaceChildren(); $('feedback').style.display = 'none'; answerId = null;
+      try {
+        const data = await jsonResponse(await fetch('/query', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({question: $('question').value})}));
+        $('answer').textContent = data.answer; answerId = data.answer_id;
+        $('status').textContent = `${data.retrieval_attempts} retrieval attempt${data.retrieval_attempts === 1 ? '' : 's'}`;
+        for (const source of data.sources) item($('sources'), `[${source.marker}] ${source.title}`, source.source, safeUrl(source.source));
+        if (!data.sources.length) item($('sources'), 'No supporting source was found.');
+        $('feedback').style.display = 'block';
+      } catch (error) { $('answer').textContent = error.message; $('answer').classList.add('error'); $('status').textContent = 'Please try again.'; }
+      finally { $('ask').disabled = false; }
+    });
+    $('feedback').addEventListener('click', async event => {
+      const rating = event.target.dataset.rating;
+      if (!rating || !answerId) return;
+      try { await jsonResponse(await fetch('/feedback', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({answer_id: answerId, rating})})); $('feedback-status').textContent = 'Feedback saved.'; }
+      catch { $('feedback-status').textContent = 'Could not save feedback.'; }
+    });
+    $('upload-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const file = $('file').files[0]; if (!file) return;
+      $('upload').disabled = true; $('upload-status').textContent = 'Indexing…';
+      try { const form = new FormData(); form.append('file', file); await jsonResponse(await fetch('/ingest', {method: 'POST', body: form})); $('upload-status').textContent = 'Indexed.'; $('upload-form').reset(); await loadDocuments(); }
+      catch (error) { $('upload-status').textContent = error.message; }
+      finally { $('upload').disabled = false; }
+    });
+    loadDocuments();
+  </script>
+</body>
+</html>

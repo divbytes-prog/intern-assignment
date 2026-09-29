@@ -23,3 +23,18 @@ def test_persistent_index_and_replacement(tmp_path: Path, monkeypatch):
     ]
     reopened = module.DocumentStore(tmp_path, "test-key", "test-model")
     assert reopened.list_documents()[0]["title"] == "Updated"
+
+
+def test_bundled_corpus_seeds_four_documents_idempotently(tmp_path: Path, monkeypatch):
+    from scripts import seed
+
+    monkeypatch.setattr(module, "Embeddings", FakeEmbedding)
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setenv("RAG_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("AI_PROVIDER", "gemini")
+    seed.main()
+    first = module.DocumentStore(tmp_path, "test-key", "test-model").list_documents()
+    assert len(first) == 4
+    assert sum(doc["chunks"] for doc in first) > 4
+    seed.main()
+    assert module.DocumentStore(tmp_path, "test-key", "test-model").list_documents() == first

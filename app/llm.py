@@ -11,6 +11,10 @@ from google.genai import types
 from google.genai.errors import APIError
 
 
+class ModelResponseError(ValueError):
+    """A model response was not the JSON object required by the workflow."""
+
+
 class LLM:
     def __init__(self, api_key: str, model: str, provider: str = "gemini"):
         self.provider = provider
@@ -37,9 +41,15 @@ class LLM:
                     if delay > 65:
                         raise
                     time.sleep(max(1.0, delay + 1))
-            return json.loads(response.text or "{}")
+            parsed = json.loads(response.text or "{}")
+            if not isinstance(parsed, dict):
+                raise ModelResponseError("Model must return a JSON object")
+            return parsed
         response = self.client.chat.completions.create(
             model=self.model, temperature=0, response_format={"type": "json_object"},
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
         )
-        return json.loads(response.choices[0].message.content or "{}")
+        parsed = json.loads(response.choices[0].message.content or "{}")
+        if not isinstance(parsed, dict):
+            raise ModelResponseError("Model must return a JSON object")
+        return parsed
