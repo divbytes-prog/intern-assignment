@@ -1,3 +1,5 @@
+import re
+
 from app.store import split_markdown
 from app.workflow import RAGWorkflow
 
@@ -21,7 +23,7 @@ class FakeLLM:
         if "query_type" in system:
             return {"search_query": "FastAPI path parameter integer", "query_type": "how-to"}
         if "relevance grader" in system:
-            return {"relevant": self.relevant}
+            return {"grades": {i: self.relevant for i in re.findall(r"(?m)^ID (\d+):", user)}}
         if "substantially different" in system:
             return {"search_query": "route URL variable type validation"}
         if "Answer ONLY" in system:
@@ -82,7 +84,7 @@ def test_mixed_relevance_filters_irrelevant_chunk():
     class MixedLLM(FakeLLM):
         def json(self, system, user):
             if "relevance grader" in system:
-                return {"relevant": "unrelated" not in user}
+                return {"grades": {"0": False, "1": True}}
             return super().json(system, user)
 
     irrelevant = dict(CHUNK, id="other:0", text="unrelated weather data")
@@ -90,6 +92,20 @@ def test_mixed_relevance_filters_irrelevant_chunk():
     assert result["status"] == "answered"
     assert result["sources"][0]["chunk_id"] == "one:0"
     assert len(result["relevant"]) == 1
+
+
+def test_grading_multiple_chunks_uses_one_model_call():
+    class CountingLLM(FakeLLM):
+        grade_calls = 0
+
+        def json(self, system, user):
+            if "relevance grader" in system:
+                self.grade_calls += 1
+            return super().json(system, user)
+
+    llm = CountingLLM()
+    RAGWorkflow(FakeStore([CHUNK, dict(CHUNK, id="two:0")]), llm).invoke("Path validation?")
+    assert llm.grade_calls == 1
 
 
 def test_support_check_rejects_unsupported_answer():

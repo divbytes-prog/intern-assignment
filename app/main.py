@@ -116,7 +116,9 @@ def create_app(service_factory=None) -> FastAPI:
         try:
             result = request.app.state.service.workflow.invoke(data.question)
         except Exception as exc:
-            raise HTTPException(status_code=502, detail=query_error_detail(exc)) from exc
+            detail = query_error_detail(exc)
+            raise HTTPException(status_code=429 if detail["provider_status"] == 429 else 502,
+                                detail=detail) from exc
         answer_id = str(uuid.uuid4())
         request.app.state.service.save_answer(answer_id, data.question)
         return {"answer_id": answer_id, "answer": result["answer"], "sources": result["sources"],

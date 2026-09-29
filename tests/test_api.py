@@ -82,3 +82,16 @@ def test_provider_failure_diagnostics_do_not_include_secrets():
     detail = query_error_detail(ProviderError("secret key and request details"))
     assert detail == {"error": "quota_or_rate_limit", "provider_status": 429}
     assert "secret" not in str(detail)
+
+    class FailingService(FakeService):
+        def __init__(self):
+            super().__init__()
+            self.workflow = self
+
+        def invoke(self, question):
+            raise ProviderError("secret key and request details")
+
+    with TestClient(create_app(lambda: FailingService())) as client:
+        response = client.post("/query", json={"question": "A valid question?"})
+        assert response.status_code == 429
+        assert response.json()["detail"] == detail

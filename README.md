@@ -30,6 +30,10 @@ The `RAGState` in `app/workflow.py` carries the original question, current
 search query, query type, attempt count, retrieved chunks, filtered relevant
 chunks, answer, citations, verification result, and status. One initial retrieval plus two retries
 is the default maximum. A failed relevance check never reaches generation.
+The default free-tier Gemini workflow uses four chat calls on a successful
+single-pass question: query analysis, batch grading, answer generation, and
+support checking. A short per-minute quota error is retried once after the
+provider's suggested delay. Other provider quota limits return HTTP 429.
 
 ## Requirements and setup
 
@@ -122,7 +126,8 @@ server-side requests. `/feedback` accepts `up` or `down` for a known
 - **Embeddings:** Gemini `gemini-embedding-2` by default, with explicit vectors
   stored in local Chroma; optional OpenAI `text-embedding-3-small`. Free-tier
   quotas vary and neither provider key is included.
-- **Grading and correction:** One binary LLM judgment per retrieved chunk. If
+- **Grading and correction:** One LLM call grades every retrieved chunk
+  independently by ID. This reduces free-tier requests. If
   none is relevant, the graph rewrites and retrieves again, for at most three
   total retrieval attempts. This makes the decision inspectable but costs more
   calls and may misclassify a borderline chunk.
