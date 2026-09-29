@@ -22,6 +22,7 @@ class RAGState(TypedDict):
     verified: bool
     web_searched: bool
     retrieval_mode: str
+    failure_reason: str
 
 
 class RAGWorkflow:
@@ -159,12 +160,17 @@ class RAGWorkflow:
         return "done" if state["verified"] else "fallback"
 
     def fallback(self, state: RAGState) -> dict:
+        reason = ("no_relevant_chunks" if not state["relevant"] else
+                  "unsupported_answer" if state["status"] == "answered" else
+                  "invalid_citations_or_empty_answer")
         return {"answer": "I do not know based on the available sources.", "sources": [],
-                "status": "insufficient_context", "verified": False}
+                "status": "insufficient_context", "verified": False,
+                "failure_reason": reason}
 
     def invoke(self, question: str, history: list[dict] | None = None) -> dict:
         return self.graph.invoke({"question": question, "standalone_question": question,
             "history": (history or [])[-4:], "web_searched": False, "retrieval_mode": "none",
+            "failure_reason": "",
             "search_query": question,
             "query_type": "", "attempts": 0, "retrieved": [], "relevant": [],
             "answer": "", "sources": [], "status": "", "verified": False})

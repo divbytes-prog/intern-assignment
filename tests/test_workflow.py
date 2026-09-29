@@ -53,6 +53,7 @@ def test_irrelevant_results_retry_then_abstain():
     assert result["attempts"] == 3
     assert result["sources"] == []
     assert len(store.calls) == 3
+    assert result["failure_reason"] == "no_relevant_chunks"
 
 
 def test_empty_store_still_has_bounded_retry():
@@ -125,6 +126,7 @@ def test_support_check_rejects_unsupported_answer():
     )
     assert result["status"] == "insufficient_context"
     assert result["sources"] == []
+    assert result["failure_reason"] == "unsupported_answer"
 
 
 def test_web_fallback_only_after_local_exhaustion_and_support_check():

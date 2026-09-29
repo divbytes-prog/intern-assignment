@@ -74,6 +74,7 @@ class QueryOutput(BaseModel):
     status: str
     retrieval_attempts: int
     retrieval_mode: str
+    failure_reason: str | None = None
 
 
 class DocumentOutput(BaseModel):
@@ -195,7 +196,8 @@ def create_app(service_factory=None) -> FastAPI:
         service.save_turn(session_id, data.question, result["answer"], result["status"])
         return {"answer_id": answer_id, "answer": result["answer"], "sources": result["sources"],
                 "session_id": session_id, "status": result["status"],
-                "retrieval_attempts": result["attempts"], "retrieval_mode": result["retrieval_mode"]}
+                "retrieval_attempts": result["attempts"], "retrieval_mode": result["retrieval_mode"],
+                "failure_reason": result.get("failure_reason") or None}
 
     @api.post("/ingest", status_code=201, response_model=DocumentOutput)
     async def ingest(request: Request):
