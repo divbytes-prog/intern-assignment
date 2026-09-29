@@ -20,6 +20,20 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as directory:
         os.environ["RAG_DATA_DIR"] = directory
         with TestClient(create_app()) as client:
+            # Report only model decision shapes, never questions, excerpts, or keys.
+            llm = client.app.state.service.workflow.llm
+            original_json = llm.json
+
+            def observed_json(system: str, user: str) -> dict:
+                result = original_json(system, user)
+                if "relevance grader" in system:
+                    grades = result.get("grades")
+                    summary = ({str(key): str(value)[:12] for key, value in grades.items()}
+                               if isinstance(grades, dict) else type(grades).__name__)
+                    print(f"Grading decision: {summary}", flush=True)
+                return result
+
+            llm.json = observed_json
             document = Path("corpus/path-parameters.md")
             ingested = client.post("/ingest", files={"file":
                 (document.name, document.read_bytes(), "text/markdown")})
