@@ -17,6 +17,12 @@ def main() -> None:
         raise SystemExit("GEMINI_API_KEY is required for this live smoke test")
     os.environ["AI_PROVIDER"] = "gemini"
     os.environ["RAG_MAX_RETRIES"] = "0"  # Conserve the free-tier model quota.
+    if os.getenv("TAVILY_API_KEY"):
+        results = TavilySearch(os.environ["TAVILY_API_KEY"]).search("FastAPI path parameter validation")
+        assert results, "Tavily returned no allowlisted documentation excerpts"
+        print("PASS: live Tavily search and official-host filtering", flush=True)
+    else:
+        print("SKIP: optional live Tavily request (no TAVILY_API_KEY secret)", flush=True)
     with tempfile.TemporaryDirectory() as directory:
         os.environ["RAG_DATA_DIR"] = directory
         with TestClient(create_app()) as client:
@@ -67,14 +73,6 @@ def main() -> None:
             assert next_answer["session_id"] == answer["session_id"]
             assert next_answer["status"] == "answered" and next_answer["sources"]
             print("PASS: live session follow-up with cited answer")
-
-    if os.getenv("TAVILY_API_KEY"):
-        results = TavilySearch(os.environ["TAVILY_API_KEY"]).search("FastAPI path parameter validation")
-        assert results, "Tavily returned no allowlisted documentation excerpts"
-        print("PASS: live Tavily search and official-host filtering")
-    else:
-        print("SKIP: optional live Tavily request (no TAVILY_API_KEY secret)")
-
 
 if __name__ == "__main__":
     main()
