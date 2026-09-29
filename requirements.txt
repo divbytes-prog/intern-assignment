@@ -4,6 +4,7 @@ python-multipart==0.0.32
 langgraph==1.2.12
 chromadb==1.5.9
 openai==2.54.0
+google-genai>=1.0,<3
 beautifulsoup4==4.15.0
 requests==2.34.2
 pydantic==2.13.5

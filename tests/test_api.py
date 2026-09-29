@@ -60,7 +60,7 @@ def test_rejects_unsafe_urls_and_file_types():
 def test_real_local_index_with_stubbed_provider(tmp_path, monkeypatch):
     from app import main, store
     from tests.test_store import FakeEmbedding
-    monkeypatch.setattr(store, "OpenAIEmbeddingFunction", FakeEmbedding)
+    monkeypatch.setattr(store, "Embeddings", FakeEmbedding)
     monkeypatch.setattr(main, "LLM", lambda *args: FakeLLM())
     with TestClient(create_app(lambda: Service(tmp_path, "test-key"))) as client:
         ingested = client.post("/ingest", files={"file": (

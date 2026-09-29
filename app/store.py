@@ -7,7 +7,26 @@ import threading
 from pathlib import Path
 
 import chromadb
-from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
+from google import genai
+from openai import OpenAI
+
+
+class Embeddings:
+    def __init__(self, api_key: str, model: str, provider: str):
+        self.provider = provider
+        self.model = model
+        self.client = genai.Client(api_key=api_key) if provider == "gemini" else OpenAI(api_key=api_key)
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        if self.provider == "gemini":
+            result = self.client.models.embed_content(model=self.model, contents=texts)
+            vectors = [item.values for item in result.embeddings]
+        else:
+            result = self.client.embeddings.create(model=self.model, input=texts)
+            vectors = [item.embedding for item in sorted(result.data, key=lambda item: item.index)]
+        if len(vectors) != len(texts) or any(not vector for vector in vectors):
+            raise ValueError("Embedding provider returned missing vectors")
+        return vectors
 
 
 def split_markdown(text: str, max_chars: int = 1200, overlap: int = 160) -> list[str]:
@@ -38,14 +57,13 @@ def split_markdown(text: str, max_chars: int = 1200, overlap: int = 160) -> list
 
 
 class DocumentStore:
-    def __init__(self, data_dir: Path, api_key: str, embedding_model: str):
+    def __init__(self, data_dir: Path, api_key: str, embedding_model: str, provider: str = "gemini"):
         data_dir.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
         client = chromadb.PersistentClient(path=str(data_dir / "chroma"))
-        embedding = OpenAIEmbeddingFunction(api_key=api_key, model_name=embedding_model)
-        self.embedding = embedding
+        self.embedding = Embeddings(api_key, embedding_model, provider)
         self.collection = client.get_or_create_collection(
-            name="technical_documentation", embedding_function=embedding,
+            name="technical_documentation", embedding_function=None,
         )
 
     def add_document(self, content: str, source: str, title: str) -> dict:
@@ -59,7 +77,7 @@ class DocumentStore:
             for i in range(len(chunks))
         ]
         # Embed first. An embedding failure does not erase the previous version.
-        vectors = self.embedding(chunks)
+        vectors = self.embedding.embed(chunks)
         with self.lock:
             self.collection.delete(where={"document_id": document_id})
             self.collection.add(ids=ids, documents=chunks, metadatas=metadatas, embeddings=vectors)
@@ -69,7 +87,8 @@ class DocumentStore:
         with self.lock:
             if self.collection.count() == 0:
                 return []
-            result = self.collection.query(query_texts=[query], n_results=min(limit, self.collection.count()),
+            vector = self.embedding.embed([query])[0]
+            result = self.collection.query(query_embeddings=[vector], n_results=min(limit, self.collection.count()),
                                            include=["documents", "metadatas", "distances"])
         return [
             {"id": rid, "text": doc, "source": meta["source"], "title": meta["title"],

@@ -34,8 +34,9 @@ is the default maximum. A failed relevance check never reaches generation.
 ## Requirements and setup
 
 - Python 3.11 or newer
-- An OpenAI API key with access to `gpt-4o-mini` and
-  `text-embedding-3-small` (model names configurable)
+- A free-tier Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey)
+  for `gemini-3-flash-preview` and `gemini-embedding-2` (subject to Google's
+  current free-tier availability and rate limits). An OpenAI API key is optional.
 - Internet for embedding/model calls; the Chroma index itself is local
 
 ```bash
@@ -45,10 +46,16 @@ python -m pip install -r requirements.txt
 cp .env.example .env           # Windows: copy .env.example .env
 ```
 
-Set `OPENAI_API_KEY` in your environment. To load a locally edited `.env` file
+Set `GEMINI_API_KEY` in your environment. To load a locally edited `.env` file
 on bash, run `set -a; source .env; set +a`. The application deliberately does
 not read or commit a key automatically. On Windows PowerShell:
-`$env:OPENAI_API_KEY="your-key"`.
+`$env:GEMINI_API_KEY="your-key"`. Keep your key out of GitHub and chat messages.
+
+For OpenAI instead, set `AI_PROVIDER=openai`, `OPENAI_API_KEY`, and optionally
+`OPENAI_CHAT_MODEL` and `OPENAI_EMBEDDING_MODEL`. Re-index into an empty `data`
+directory when changing embedding providers or models; their vector dimensions
+may differ. Gemini's free tier has per-project quotas, and some keys/projects
+may have different model availability; check your AI Studio rate-limit page.
 
 ```bash
 python -m scripts.seed
@@ -113,9 +120,9 @@ server-side requests. `/feedback` accepts `up` or `down` for a known
   statements and adjacent headings mostly together and avoids excessive
   duplication on short notes. A more complex corpus would benefit from
   Markdown-aware section paths and token-based chunking.
-- **Embeddings:** `text-embedding-3-small` via Chroma's embedding function,
-  with a persistent local index. This keeps the demo small but requires an API
-  key and incurs provider costs. No provider key is included.
+- **Embeddings:** Gemini `gemini-embedding-2` by default, with explicit vectors
+  stored in local Chroma; optional OpenAI `text-embedding-3-small`. Free-tier
+  quotas vary and neither provider key is included.
 - **Grading and correction:** One binary LLM judgment per retrieved chunk. If
   none is relevant, the graph rewrites and retrieves again, for at most three
   total retrieval attempts. This makes the decision inspectable but costs more

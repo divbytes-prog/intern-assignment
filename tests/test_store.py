@@ -4,21 +4,15 @@ from app import store as module
 
 
 class FakeEmbedding:
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         pass
 
-    def __call__(self, input):
+    def embed(self, input):
         return [[float(len(text) % 13), float(text.count("path")), 1.0] for text in input]
-
-    def embed_query(self, input):
-        return self(input)
-
-    def name(self):
-        return "test-embedding"
 
 
 def test_persistent_index_and_replacement(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(module, "OpenAIEmbeddingFunction", FakeEmbedding)
+    monkeypatch.setattr(module, "Embeddings", FakeEmbedding)
     store = module.DocumentStore(tmp_path, "test-key", "test-model")
     first = store.add_document("# Path\n\nA path parameter.", "doc:one", "First")
     assert first["chunks"] == 1

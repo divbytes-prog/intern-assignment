@@ -31,9 +31,16 @@ class FeedbackInput(BaseModel):
 
 class Service:
     def __init__(self, data_dir: Path, api_key: str):
-        self.store = DocumentStore(data_dir, api_key, os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"))
+        provider = os.getenv("AI_PROVIDER", "gemini").lower()
+        if provider not in {"gemini", "openai"}:
+            raise ValueError("AI_PROVIDER must be gemini or openai")
+        embedding_model = (os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-2") if provider == "gemini"
+                           else os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"))
+        chat_model = (os.getenv("GEMINI_CHAT_MODEL", "gemini-3-flash-preview") if provider == "gemini"
+                      else os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini"))
+        self.store = DocumentStore(data_dir, api_key, embedding_model, provider)
         self.workflow = RAGWorkflow(
-            self.store, LLM(api_key, os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")),
+            self.store, LLM(api_key, chat_model, provider),
             top_k=int(os.getenv("RAG_TOP_K", "4")), max_retries=int(os.getenv("RAG_MAX_RETRIES", "2")),
         )
         self.lock = threading.RLock()
@@ -63,9 +70,11 @@ class Service:
 def create_app(service_factory=None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        key = os.getenv("OPENAI_API_KEY")
+        provider = os.getenv("AI_PROVIDER", "gemini").lower()
+        key_name = "GEMINI_API_KEY" if provider == "gemini" else "OPENAI_API_KEY"
+        key = os.getenv(key_name)
         if service_factory is None and not key:
-            raise RuntimeError("Set OPENAI_API_KEY before starting the application")
+            raise RuntimeError(f"Set {key_name} before starting the application")
         app.state.service = service_factory() if service_factory else Service(
             Path(os.getenv("RAG_DATA_DIR", "./data")), key
         )
