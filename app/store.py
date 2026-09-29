@@ -8,6 +8,7 @@ from pathlib import Path
 
 import chromadb
 from google import genai
+from google.genai import types
 from openai import OpenAI
 
 
@@ -19,7 +20,11 @@ class Embeddings:
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         if self.provider == "gemini":
-            result = self.client.models.embed_content(model=self.model, contents=texts)
+            # Embedding 2 aggregates a plain list of strings into ONE vector.
+            # Separate Content objects request one vector for each chunk.
+            contents = ([types.Content(parts=[types.Part.from_text(text=text)]) for text in texts]
+                        if self.model == "gemini-embedding-2" else texts)
+            result = self.client.models.embed_content(model=self.model, contents=contents)
             vectors = [item.values for item in result.embeddings]
         else:
             result = self.client.embeddings.create(model=self.model, input=texts)

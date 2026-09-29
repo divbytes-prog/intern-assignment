@@ -203,7 +203,9 @@ server-side requests. `/feedback` accepts `up` or `down` for a known
   duplication on short notes. A more complex corpus would benefit from
   Markdown-aware section paths and token-based chunking.
 - **Embeddings:** Gemini `gemini-embedding-2` by default, with explicit vectors
-  stored in local Chroma; optional OpenAI `text-embedding-3-small`. Free-tier
+  stored in local Chroma. Each chunk is passed as a separate Gemini `Content`
+  object so Embedding 2 returns a distinct vector per chunk; optional OpenAI
+  `text-embedding-3-small`. Free-tier
   quotas vary and neither provider key is included.
 - **Grading and correction:** One LLM call grades every retrieved chunk
   independently by ID. This reduces free-tier requests. If

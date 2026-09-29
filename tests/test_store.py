@@ -38,3 +38,24 @@ def test_bundled_corpus_seeds_four_documents_idempotently(tmp_path: Path, monkey
     assert sum(doc["chunks"] for doc in first) > 4
     seed.main()
     assert module.DocumentStore(tmp_path, "test-key", "test-model").list_documents() == first
+
+
+def test_embedding_two_returns_one_vector_per_chunk(monkeypatch):
+    class Client:
+        @property
+        def models(self):
+            return self
+
+        def embed_content(self, *, model, contents):
+            assert model == "gemini-embedding-2"
+            assert len(contents) == 2
+            assert all(isinstance(item, module.types.Content) for item in contents)
+            class Result:
+                embeddings = [type("E", (), {"values": [1.0, 0.0]})(),
+                              type("E", (), {"values": [0.0, 1.0]})()]
+            return Result()
+
+    monkeypatch.setattr(module.genai, "Client", lambda **kwargs: Client())
+    assert module.Embeddings("test", "gemini-embedding-2", "gemini").embed(["a", "b"]) == [
+        [1.0, 0.0], [0.0, 1.0],
+    ]
