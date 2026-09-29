@@ -108,3 +108,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# This generator is documentation-only and is not required at runtime.
