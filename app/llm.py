@@ -23,7 +23,7 @@ class LLM:
 
     def json(self, system: str, user: str) -> dict:
         if self.provider == "gemini":
-            for attempt in range(2):
+            for attempt in range(3):
                 try:
                     response = self.client.models.generate_content(
                         model=self.model, contents=user,
@@ -33,6 +33,9 @@ class LLM:
                     )
                     break
                 except APIError as exc:
+                    if exc.code in {500, 502, 503, 504} and attempt < 2:
+                        time.sleep(2 ** (attempt + 1))
+                        continue
                     if exc.code != 429 or attempt:
                         raise
                     # Only retry a short per-minute limit; don't wait on daily quota.
