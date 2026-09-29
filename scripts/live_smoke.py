@@ -31,7 +31,14 @@ def main() -> None:
             original_json = llm.json
 
             def observed_json(system: str, user: str) -> dict:
-                result = original_json(system, user)
+                try:
+                    result = original_json(system, user)
+                except Exception as exc:
+                    print(f"Model call failed: {type(exc).__name__}, "
+                          f"status={getattr(exc, 'status_code', None)}, "
+                          f"stage={'repair' if 'Each factual claim in answer MUST' in system else 'other'}",
+                          flush=True)
+                    raise
                 if "Answer ONLY" in system or "Each factual claim in answer MUST" in system:
                     answer = result.get("answer")
                     stage = "repair" if "Each factual claim in answer MUST" in system else "initial"
