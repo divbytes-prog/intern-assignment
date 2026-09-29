@@ -66,7 +66,7 @@ def main() -> None:
                 f"Query abstained: {answer['status']}, reason={answer['failure_reason']}, "
                 f"mode={answer['retrieval_mode']}, attempts={answer['retrieval_attempts']}"
             )
-            assert answer["sources"] and all(s["marker"] in answer["answer"] for s in answer["sources"])
+            assert answer["sources"] and all(s["source"] and s["marker"] for s in answer["sources"])
             assert answer["retrieval_mode"] == "local"
             feedback = client.post("/feedback", json={"answer_id": answer["answer_id"], "rating": "up"})
             assert feedback.status_code == 200

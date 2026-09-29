@@ -22,7 +22,7 @@ additional Markdown, text, HTML, or supported documentation URLs.
 | Conditional routing and retry limit | Relevant chunks go to generation; otherwise rewrite and re-retrieve at most twice, then abstain |
 | Ingestion, chunking, embeddings, vector store | `scripts/seed.py`, `app/ingest.py`, and `app/store.py`; local FastEmbed vectors and persistent Chroma |
 | Four API endpoints | `POST /query`, `POST /ingest`, `GET /documents`, `POST /feedback` |
-| Grounded response with citations | Generation uses only graded chunks; source markers are checked and a separate LLM node reviews support |
+| Grounded response with citations | Generation uses only graded chunks; source markers or the explicit `sources` list identify cited documents, and a separate LLM node reviews support |
 | Hallucination check (bonus) | Citation marker validation plus a separate answer-support LLM node; unsupported answers abstain |
 | Web search fallback (bonus) | After local retries, optional Tavily search limited to three official documentation hosts; results are graded and verified like local chunks |
 | Conversation memory (bonus) | UUID session ID, four recent turns in SQLite, follow-up query resolution; only retrieved sources can support an answer |
@@ -215,11 +215,12 @@ server-side requests. `/feedback` accepts `up` or `down` for a known
   none is relevant, the graph rewrites and retrieves again, for at most three
   total retrieval attempts. This makes the decision inspectable but costs more
   calls and may misclassify a borderline chunk.
-- **Grounding:** Generation sees only graded chunks and must return inline
+- **Grounding:** Generation sees only graded chunks and is asked for inline
   source markers. If a model lists valid citations but omits the inline syntax,
-  one model retry can repair the citation placement. The graph checks marker
-  validity, then an independent LLM
-  check evaluates whether every claim and citation is supported. Failure
+  one model retry can repair the citation placement. If the retry still omits
+  inline markers, the API's explicit `sources` list gives references to the
+  cited documents. An independent LLM check then evaluates every claim against
+  **only those cited excerpts**. Failure
   causes abstention. The support checker reduces risk but can still make
   errors; it is not a formal proof.
 - **Persistence:** Chroma stores the indexed chunks; SQLite stores answer IDs,

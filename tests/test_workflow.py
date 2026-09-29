@@ -100,7 +100,7 @@ def test_missing_inline_markers_get_one_model_repair():
     assert llm.calls == 1
 
 
-def test_unrepaired_inline_markers_still_abstain():
+def test_unrepaired_inline_markers_use_separate_verified_sources():
     class OmittedInline(FakeLLM):
         def json(self, system, user):
             if "Answer ONLY" in system or "Each factual claim in answer MUST" in system:
@@ -108,8 +108,23 @@ def test_unrepaired_inline_markers_still_abstain():
             return super().json(system, user)
 
     result = RAGWorkflow(FakeStore([CHUNK]), OmittedInline()).invoke("How do I validate item_id?")
+    assert result["status"] == "answered"
+    assert result["sources"][0]["marker"] == "S1"
+    assert "[S1]" not in result["answer"]
+
+
+def test_separate_sources_still_fail_if_support_check_rejects():
+    class OmittedInline(FakeLLM):
+        def json(self, system, user):
+            if "Answer ONLY" in system or "Each factual claim in answer MUST" in system:
+                return {"answer": "Unsupported detail.", "citations": ["S1"]}
+            return super().json(system, user)
+
+    result = RAGWorkflow(FakeStore([CHUNK]), OmittedInline(supported=False)).invoke(
+        "How do I validate item_id?"
+    )
     assert result["status"] == "insufficient_context"
-    assert result["failure_reason"] == "invalid_citations_or_empty_answer"
+    assert result["sources"] == []
 
 
 def test_malformed_citation_list_abstains_instead_of_crashing():
