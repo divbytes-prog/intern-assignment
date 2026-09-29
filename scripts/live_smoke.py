@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -26,6 +27,21 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as directory:
         os.environ["RAG_DATA_DIR"] = directory
         with TestClient(create_app()) as client:
+            llm = client.app.state.service.workflow.llm
+            original_json = llm.json
+
+            def observed_json(system: str, user: str) -> dict:
+                result = original_json(system, user)
+                if "Answer ONLY" in system:
+                    answer = result.get("answer")
+                    print(f"Generation shape: keys={list(result)}, "
+                          f"answer_type={type(answer).__name__}, "
+                          f"markers={re.findall(r'\[(S\d+)\]', answer) if isinstance(answer, str) else []}, "
+                          f"citations_type={type(result.get('citations')).__name__}, "
+                          f"citations={str(result.get('citations'))[:100]}", flush=True)
+                return result
+
+            llm.json = observed_json
             document = Path("corpus/path-parameters.md")
             ingested = client.post("/ingest", files={"file":
                 (document.name, document.read_bytes(), "text/markdown")})
