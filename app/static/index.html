@@ -72,7 +72,7 @@
     const $ = id => document.getElementById(id);
     let answerId = null;
     let sessionId = null;
-    $('new-session').addEventListener('click', () => { sessionId = null; answerId = null; $('question').value = ''; $('answer').textContent = ''; $('sources').replaceChildren(); $('feedback').style.display = 'none'; $('status').textContent = 'New conversation started.'; });
+    $('new-session').addEventListener('click', () => { sessionId = null; answerId = null; $('question').value = ''; $('answer').textContent = ''; $('sources').replaceChildren(); item($('sources'), 'Sources will appear after an answer.'); $('feedback').style.display = 'none'; $('feedback-status').textContent = ''; $('status').textContent = 'New conversation started.'; });
     async function jsonResponse(response) {
       const body = await response.json();
       if (!response.ok) throw new Error(typeof body.detail === 'string' ? body.detail : (body.detail?.error || `Request failed (${response.status})`));
@@ -100,7 +100,7 @@
       event.preventDefault();
       $('ask').disabled = true; $('status').textContent = 'Checking the documents…';
       $('answer').textContent = ''; $('answer').classList.remove('error');
-      $('sources').replaceChildren(); $('feedback').style.display = 'none'; answerId = null;
+      $('sources').replaceChildren(); $('feedback').style.display = 'none'; $('feedback-status').textContent = ''; answerId = null;
       try {
         const data = await jsonResponse(await fetch('/query', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({question: $('question').value, session_id: sessionId})}));
         sessionId = data.session_id;
