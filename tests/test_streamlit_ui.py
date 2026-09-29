@@ -57,6 +57,13 @@ class FakeAPI:
                 "status": "answered",
                 "retrieval_attempts": 1,
                 "retrieval_mode": "local",
+                "trace": [
+                    "Query analyzed for retrieval.",
+                    "Local retrieval completed in 1 attempt.",
+                    "1 chunk passed relevance grading.",
+                    "1 source cited in the answer.",
+                    "Support verification passed.",
+                ],
                 "failure_reason": None,
             })
         if method == "POST" and path == "/feedback":
@@ -89,6 +96,7 @@ def test_streamlit_chat_followup_feedback_upload_and_reset():
         assert at.session_state["session_id"] == "11111111-1111-1111-1111-111111111111"
         assert at.session_state["messages"][-1]["role"] == "assistant"
         assert any("Path parameters" in item.value for item in at.markdown)
+        assert any("Support verification passed" in item.value for item in at.markdown)
 
         button(at, "Helpful").click().run()
         assert any(path == "/feedback" for _, path, _ in api.calls)

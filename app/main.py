@@ -74,7 +74,34 @@ class QueryOutput(BaseModel):
     status: str
     retrieval_attempts: int
     retrieval_mode: str
+    trace: list[str]
     failure_reason: str | None = None
+
+
+def pipeline_trace(result: dict) -> list[str]:
+    """Expose inspectable pipeline metadata without model chain-of-thought."""
+    attempts = int(result.get("attempts") or 0)
+    mode = str(result.get("retrieval_mode") or "none")
+    sources = result.get("sources") or []
+    relevant = result.get("relevant") or []
+    relevant_count = max(len(relevant), len(sources))
+    steps = ["Query analyzed for retrieval."]
+    if mode == "web":
+        steps.append(
+            f"Local retrieval used {attempts} attempt{'s' if attempts != 1 else ''}; "
+            "official-documentation web fallback was then used."
+        )
+    elif mode == "local":
+        steps.append(f"Local retrieval completed in {attempts} attempt{'s' if attempts != 1 else ''}.")
+    else:
+        steps.append(f"Local retrieval completed in {attempts} attempt{'s' if attempts != 1 else ''} without usable evidence.")
+    steps.append(f"{relevant_count} chunk{'s' if relevant_count != 1 else ''} passed relevance grading.")
+    if result.get("status") == "answered":
+        steps.append(f"{len(sources)} source{'s' if len(sources) != 1 else ''} cited in the answer.")
+        steps.append("Support verification passed.")
+    else:
+        steps.append("System abstained because the available evidence was insufficient or unsupported.")
+    return steps
 
 
 class DocumentOutput(BaseModel):
@@ -214,6 +241,7 @@ def create_app(service_factory=None) -> FastAPI:
         return {"answer_id": answer_id, "answer": result["answer"], "sources": result["sources"],
                 "session_id": session_id, "status": result["status"],
                 "retrieval_attempts": result["attempts"], "retrieval_mode": result["retrieval_mode"],
+                "trace": pipeline_trace(result),
                 "failure_reason": result.get("failure_reason") or None}
 
     @api.post("/ingest", status_code=201, response_model=DocumentOutput)

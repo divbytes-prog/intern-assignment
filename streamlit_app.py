@@ -51,6 +51,11 @@ def show_answer(message: dict):
             st.markdown(f"[{source['marker']}] [{source['title']}]({url})")
         else:
             st.text(f"[{source['marker']}] {source['title']} ({url})")
+    trace = message.get("trace") or []
+    if trace:
+        with st.expander("How this answer was checked"):
+            for step in trace:
+                st.markdown(f"- {step}")
 
 
 with st.sidebar:

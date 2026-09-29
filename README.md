@@ -2,6 +2,14 @@
 
 [![Tests](https://github.com/divbytes-prog/intern-assignment/actions/workflows/tests.yml/badge.svg)](https://github.com/divbytes-prog/intern-assignment/actions/workflows/tests.yml)
 
+## Quick demo
+
+![Technical Documentation Assistant walkthrough](docs/demo.gif)
+
+The short walkthrough is generated deterministically from the current browser
+UI copy by `scripts/make_demo_gif.py`. It highlights the normal reviewer flow:
+ask a question, inspect cited evidence, and open the compact pipeline trace.
+
 A small, self-corrective RAG service for technical documentation. Built for the
 Express Analytics AI/ML Engineer Intern assignment. It indexes four original
 FastAPI study notes, retrieves semantically similar chunks with Chroma, grades
@@ -167,7 +175,14 @@ Representative response (model wording and ID vary):
   }],
   "status": "answered",
   "retrieval_attempts": 1,
-  "retrieval_mode": "local"
+  "retrieval_mode": "local",
+  "trace": [
+    "Query analyzed for retrieval.",
+    "Local retrieval completed in 1 attempt.",
+    "1 chunk passed relevance grading.",
+    "1 source cited in the answer.",
+    "Support verification passed."
+  ]
 }
 ```
 
@@ -199,6 +214,20 @@ multipart URL fields, or one .md/.txt/.html upload. It limits content to 1 MB
 and URL fetching to three official documentation hosts to avoid arbitrary
 server-side requests. `/feedback` accepts `up` or `down` for a known
 `answer_id`; subsequent feedback replaces the previous vote.
+
+## Evaluation
+
+The repository includes a small human-authored evaluation set in
+`evaluation/cases.json`. It checks answerability, expected source selection,
+grounded citations, follow-up memory, and abstention on an out-of-domain
+question. `scripts/evaluate.py` runs those cases against the real application
+with a fresh local Chroma index. The **Live RAG evaluation** GitHub Actions
+workflow uses the configured Groq secret and publishes the generated Markdown
+report as an artifact.
+
+This is deliberately a compact regression/evaluation set rather than a claim
+of benchmark-level model accuracy. The committed `evaluation/latest.md`
+records the most recent reviewed live run.
 
 ## Design decisions and tradeoffs
 
@@ -297,5 +326,8 @@ app/static/       Optional browser interface
 streamlit_app.py  Streamlit chat frontend
 corpus/           Four original documentation notes and source manifest
 scripts/seed.py   Idempotent corpus indexer
-tests/            Graph and API behavior tests
+scripts/evaluate.py Live corpus-grounded evaluation runner
+evaluation/       Human-authored evaluation cases and latest reviewed report
+docs/demo.gif     Short generated interface walkthrough
+tests/            Graph and API/UI behavior tests
 ```

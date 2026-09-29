@@ -1,0 +1,46 @@
+[
+  {
+    "id": "path-integer-validation",
+    "question": "How does FastAPI validate an integer path parameter?",
+    "expected_status": "answered",
+    "expected_source": "https://fastapi.tiangolo.com/tutorial/path-params/"
+  },
+  {
+    "id": "request-body-model",
+    "question": "Why would I use a Pydantic BaseModel for a JSON request body?",
+    "expected_status": "answered",
+    "expected_source": "https://fastapi.tiangolo.com/tutorial/body/"
+  },
+  {
+    "id": "dependency-basics",
+    "session": "dependencies",
+    "question": "What does Depends(callable) do in FastAPI?",
+    "expected_status": "answered",
+    "expected_source": "https://fastapi.tiangolo.com/tutorial/dependencies/"
+  },
+  {
+    "id": "dependency-follow-up",
+    "session": "dependencies",
+    "question": "Does it reuse the result if the same dependency appears more than once in one request?",
+    "expected_status": "answered",
+    "expected_source": "https://fastapi.tiangolo.com/tutorial/dependencies/"
+  },
+  {
+    "id": "response-filtering",
+    "question": "Can a FastAPI response model prevent an internal field from being returned?",
+    "expected_status": "answered",
+    "expected_source": "https://fastapi.tiangolo.com/tutorial/response-model/"
+  },
+  {
+    "id": "path-route-order",
+    "question": "Why should /users/me be declared before /users/{user_id}?",
+    "expected_status": "answered",
+    "expected_source": "https://fastapi.tiangolo.com/tutorial/path-params/"
+  },
+  {
+    "id": "out-of-domain-abstention",
+    "question": "How do I configure a Kubernetes Ingress controller for TLS termination?",
+    "expected_status": "insufficient_context",
+    "expected_source": null
+  }
+]

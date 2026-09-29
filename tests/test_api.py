@@ -50,6 +50,7 @@ def test_query_ingest_documents_feedback():
         landing = client.get("/")
         assert landing.status_code == 200
         assert "Ask the docs" in landing.text
+        assert "How this answer was checked" in landing.text
         assert client.get("/health").json() == {"status": "ok"}
         bad = client.post("/query", json={"question": "x"})
         assert bad.status_code == 422
@@ -63,6 +64,8 @@ def test_query_ingest_documents_feedback():
         assert response.status_code == 200
         answer = response.json()
         assert answer["sources"][0]["marker"] == "S1"
+        assert answer["trace"][-1] == "Support verification passed."
+        assert any("relevance grading" in step for step in answer["trace"])
         assert client.post("/feedback", json={"answer_id": answer["answer_id"], "rating": "up"}).status_code == 200
         assert client.post("/feedback", json={"answer_id": "missing", "rating": "down"}).status_code == 404
         assert client.post("/feedback", json={"answer_id": answer["answer_id"], "rating": "maybe"}).status_code == 422
