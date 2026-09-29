@@ -23,7 +23,11 @@ additional Markdown, text, HTML, or supported documentation URLs.
 | Ingestion, chunking, embeddings, vector store | `scripts/seed.py`, `app/ingest.py`, and `app/store.py`; provider embeddings and persistent Chroma |
 | Four API endpoints | `POST /query`, `POST /ingest`, `GET /documents`, `POST /feedback` |
 | Grounded response with citations | Generation uses only graded chunks; source markers are checked and a separate LLM node reviews support |
-| Optional small interface | `GET /` serves a same-origin browser UI; `/docs` remains the interactive API |
+| Hallucination check (bonus) | Citation marker validation plus a separate answer-support LLM node; unsupported answers abstain |
+| Web search fallback (bonus) | After local retries, optional Tavily search limited to three official documentation hosts; results are graded and verified like local chunks |
+| Conversation memory (bonus) | UUID session ID, four recent turns in SQLite, follow-up query resolution; only retrieved sources can support an answer |
+| Streamlit frontend (bonus) | `streamlit_app.py` provides chat, citations, upload, indexed documents, feedback, and new conversation |
+| Optional browser interface | `GET /` serves a same-origin browser UI; `/docs` remains the interactive API |
 
 ## Architecture
 
@@ -38,12 +42,14 @@ flowchart TD
   H -->|Unsupported| G
   D -->|None, retries left| F["Rewrite query"]
   F --> C
-  D -->|Retry limit reached| G["Abstain"]
+  D -->|Retry limit reached, Tavily configured| W["Search official docs on web"]
+  W --> D
+  D -->|No evidence or no web key| G["Abstain"]
 ```
 
-The `RAGState` in `app/workflow.py` carries the original question, current
+The `RAGState` in `app/workflow.py` carries the original and resolved follow-up question, short session context, current
 search query, query type, attempt count, retrieved chunks, filtered relevant
-chunks, answer, citations, verification result, and status. One initial retrieval plus two retries
+chunks, answer, citations, verification result, and status. One initial local retrieval plus two retries
 is the default maximum. A failed relevance check never reaches generation.
 The default Gemini workflow uses four chat calls on a successful
 single-pass question: query analysis, batch grading, answer generation, and
@@ -101,6 +107,38 @@ Copy-Item .env.example .env
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
 ```
 
+### Optional bonuses
+
+Set `TAVILY_API_KEY` in `.env` to enable the web fallback. Obtain it from
+[Tavily](https://docs.tavily.com/documentation/api-reference/endpoint/search).
+When local retrieval has no relevant chunks after bounded retries, the graph
+makes at most one Tavily call. It requests up to three short excerpts from
+`fastapi.tiangolo.com`, `docs.pydantic.dev`, and `docs.python.org`, then checks
+actual URL hosts again, grades the excerpts, generates a cited answer, and
+performs the same support check. A missing key simply leaves this fallback
+disabled. API errors return a safe 502/429; no unverified web excerpt is
+returned as an answer. Tavily is a separate provider and may have its own
+quota; no key is included in this repository.
+
+To run the Streamlit chat interface, install its additional dependency and
+start it in a **second** terminal while FastAPI is running:
+
+```bash
+python -m pip install -r requirements-ui.txt
+python -m streamlit run streamlit_app.py
+```
+
+Windows PowerShell: ` .\.venv\Scripts\python.exe -m pip install -r requirements-ui.txt `
+then ` .\.venv\Scripts\python.exe -m streamlit run streamlit_app.py `.
+The default API URL is `http://127.0.0.1:8000`; override it with
+`RAG_API_URL` if needed. The Streamlit and built-in browser interfaces both
+reuse the API session ID for follow-ups and provide a new-conversation action.
+Session history is stored locally in SQLite and trimmed to four turns per
+UUID. The history helps resolve a question like “What about integers?” but
+never appears as evidence in generation; the supporting text still comes from
+graded local or official web excerpts. Anyone with a session UUID can reuse
+that local session; deploy behind authentication before exposing it publicly.
+
 ## API examples
 
 ```bash
@@ -114,6 +152,7 @@ Representative response (model wording and ID vary):
 ```json
 {
   "answer_id": "dce703d0-01be-49ae-836b-85e9a1785c18",
+  "session_id": "aa3a3048-d402-4e48-9052-2dd5e595ea5d",
   "answer": "Annotate the route parameter as int so FastAPI parses and validates it [S1].",
   "sources": [{
     "marker": "S1",
@@ -122,7 +161,8 @@ Representative response (model wording and ID vary):
     "chunk_id": "7f9d...:0"
   }],
   "status": "answered",
-  "retrieval_attempts": 1
+  "retrieval_attempts": 1,
+  "retrieval_mode": "local"
 }
 ```
 
@@ -138,6 +178,11 @@ curl -X POST http://127.0.0.1:8000/feedback \
   -H 'Content-Type: application/json' \
   -d '{"answer_id":"dce703d0-01be-49ae-836b-85e9a1785c18","rating":"up","comment":"Useful"}'
 ```
+
+For a follow-up, pass the returned session ID in the next `/query` JSON
+body, for example `{"question":"What if it is not an integer?", "session_id":"aa3a3048-d402-4e48-9052-2dd5e595ea5d"}`.
+Omit it to begin a fresh session. The `retrieval_mode` value is `local`,
+`web`, or `none` (when no usable source was found).
 
 `/query` returns an explicit `insufficient_context` status and no sources
 when the graph cannot establish relevance after its bounded retries, when
@@ -170,8 +215,8 @@ server-side requests. `/feedback` accepts `up` or `down` for a known
   check evaluates whether every claim and citation is supported. Failure
   causes abstention. The support checker reduces risk but can still make
   errors; it is not a formal proof.
-- **Persistence:** Chroma stores the indexed chunks; SQLite stores answer IDs
-  and feedback. It is appropriate for a local single-process demo, not a
+- **Persistence:** Chroma stores the indexed chunks; SQLite stores answer IDs,
+  feedback, and four recent turns per session. It is appropriate for a local single-process demo, not a
   multi-worker production deployment.
 - **Assumptions:** A 1 MB limit and curated HTTPS host allowlist are sufficient
   for this technical-docs demo. Public authentication, rate limiting, and
@@ -183,9 +228,10 @@ result might be about the wrong API; filtering it before generation is more
 useful than merely asking the generator to be careful. A bounded rewrite loop
 allows one recovery path without trapping a request indefinitely.
 
-The optional web-search fallback and conversation memory are not included.
-The optional support-check node and a dependency-free browser UI are included.
-The PDF marks these extras as bonuses; the core graph remains inspectable.
+All four PDF bonus items are implemented. The Tavily path needs a separate
+key to run live, and model/provider quotas may prevent a live demonstration.
+Tests mock external services, so they establish graph behavior without
+claiming live availability of either provider.
 
 With more time I would add a human-reviewed factual evaluation set, explicit
 document versioning, observability/cost metrics, OCR/PDF ingestion, and broader
@@ -200,7 +246,8 @@ pytest -q
 
 Tests cover the successful citation path, mixed relevance filtering, bounded
 retries and abstention, malformed citation handling, support check, API
-validation, ingestion, feedback, repeated corpus seeding, safe provider error
+validation, ingestion, feedback, session isolation, bounded history, web
+host filtering, fallback routing, repeated corpus seeding, safe provider error
 handling, and a complete local API-to-Chroma flow with only external
 embedding/model calls stubbed. Tests do not claim live provider availability.
 For a live smoke test, seed the corpus and call `/query` with the example above.
@@ -213,7 +260,9 @@ app/workflow.py   LangGraph state, nodes, and conditional edges
 app/store.py      Chroma persistence and chunking
 app/llm.py        JSON model interface
 app/ingest.py     Bounded official-URL ingestion
+app/web_search.py Optional Tavily fallback with host validation
 app/static/       Optional browser interface
+streamlit_app.py  Streamlit chat frontend
 corpus/           Four original documentation notes and source manifest
 scripts/seed.py   Idempotent corpus indexer
 tests/            Graph and API behavior tests

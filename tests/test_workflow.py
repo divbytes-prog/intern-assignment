@@ -125,3 +125,58 @@ def test_support_check_rejects_unsupported_answer():
     )
     assert result["status"] == "insufficient_context"
     assert result["sources"] == []
+
+
+def test_web_fallback_only_after_local_exhaustion_and_support_check():
+    class Web:
+        calls = []
+
+        def search(self, query):
+            self.calls.append(query)
+            return [CHUNK]
+
+    class Local(FakeStore):
+        def search(self, query, limit):
+            self.calls.append(query)
+            return []
+
+    web = Web()
+    local = Local([])
+    result = RAGWorkflow(local, FakeLLM(), max_retries=1, web_search=web).invoke("Path validation?")
+    assert result["status"] == "answered"
+    assert result["retrieval_mode"] == "web"
+    assert result["attempts"] == 2
+    assert len(web.calls) == 1
+
+
+def test_web_irrelevance_ends_without_another_search():
+    class Web:
+        calls = 0
+
+        def search(self, query):
+            self.calls += 1
+            return [CHUNK]
+
+    web = Web()
+    result = RAGWorkflow(FakeStore([]), FakeLLM(relevant=False),
+                         max_retries=0, web_search=web).invoke("Path validation?")
+    assert result["status"] == "insufficient_context"
+    assert web.calls == 1
+
+
+def test_follow_up_expands_for_retrieval_but_history_is_not_evidence():
+    class FollowUpLLM(FakeLLM):
+        def json(self, system, user):
+            if "query_type" in system:
+                assert "Q: What are path parameters?" in user
+                return {"standalone_question": "How do FastAPI path parameters validate integers?",
+                        "search_query": "FastAPI integer path parameters", "query_type": "how-to"}
+            if "relevance grader" in system:
+                assert "How do FastAPI path parameters validate integers?" in user
+            return super().json(system, user)
+
+    store = FakeStore([CHUNK])
+    result = RAGWorkflow(store, FollowUpLLM()).invoke(
+        "How about integers?", [{"question": "What are path parameters?", "answer": "A route variable."}])
+    assert store.calls == ["FastAPI integer path parameters"]
+    assert result["status"] == "answered"

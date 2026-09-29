@@ -54,7 +54,7 @@
         <form id="question-form">
           <label for="question">Your question</label>
           <textarea id="question" required minlength="3" maxlength="1000" placeholder="How does FastAPI validate an integer path parameter?"></textarea>
-          <div class="row"><button id="ask" type="submit">Ask question</button><span class="muted" id="status" role="status"></span></div>
+          <div class="row"><button id="ask" type="submit">Ask question</button><button id="new-session" type="button">New conversation</button><span class="muted" id="status" role="status"></span></div>
         </form>
         <div id="answer" class="answer" aria-live="polite"></div>
         <div id="feedback" class="feedback"><small>Was this answer helpful?</small> <button type="button" data-rating="up">Yes</button> <button type="button" data-rating="down">No</button> <span id="feedback-status" class="muted"></span></div>
@@ -67,10 +67,12 @@
       </div>
     </aside>
   </main>
-  <footer>Local demo · <a href="/docs">API documentation</a> · Answers are limited to indexed documents.</footer>
+  <footer>Local demo · <a href="/docs">API documentation</a> · Web fallback uses official documentation if configured.</footer>
   <script>
     const $ = id => document.getElementById(id);
     let answerId = null;
+    let sessionId = null;
+    $('new-session').addEventListener('click', () => { sessionId = null; answerId = null; $('question').value = ''; $('answer').textContent = ''; $('sources').replaceChildren(); $('feedback').style.display = 'none'; $('status').textContent = 'New conversation started.'; });
     async function jsonResponse(response) {
       const body = await response.json();
       if (!response.ok) throw new Error(typeof body.detail === 'string' ? body.detail : (body.detail?.error || `Request failed (${response.status})`));
@@ -100,9 +102,10 @@
       $('answer').textContent = ''; $('answer').classList.remove('error');
       $('sources').replaceChildren(); $('feedback').style.display = 'none'; answerId = null;
       try {
-        const data = await jsonResponse(await fetch('/query', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({question: $('question').value})}));
+        const data = await jsonResponse(await fetch('/query', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({question: $('question').value, session_id: sessionId})}));
+        sessionId = data.session_id;
         $('answer').textContent = data.answer; answerId = data.answer_id;
-        $('status').textContent = `${data.retrieval_attempts} retrieval attempt${data.retrieval_attempts === 1 ? '' : 's'}`;
+        $('status').textContent = `${data.retrieval_attempts} local attempt${data.retrieval_attempts === 1 ? '' : 's'} · ${data.retrieval_mode} source`;
         for (const source of data.sources) item($('sources'), `[${source.marker}] ${source.title}`, source.source, safeUrl(source.source));
         if (!data.sources.length) item($('sources'), 'No supporting source was found.');
         $('feedback').style.display = 'block';

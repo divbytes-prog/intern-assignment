@@ -20,6 +20,7 @@ from app.ingest import MAX_BYTES, fetch_document
 from app.llm import LLM, ModelResponseError
 from app.store import DocumentStore
 from app.workflow import RAGWorkflow
+from app.web_search import TavilySearch
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
@@ -47,6 +48,7 @@ def query_error_detail(exc: Exception) -> dict:
 
 class QueryInput(BaseModel):
     question: str = Field(min_length=3, max_length=1000)
+    session_id: uuid.UUID | None = None
 
     @field_validator("question")
     @classmethod
@@ -66,10 +68,12 @@ class SourceOutput(BaseModel):
 
 class QueryOutput(BaseModel):
     answer_id: str
+    session_id: uuid.UUID
     answer: str
     sources: list[SourceOutput]
     status: str
     retrieval_attempts: int
+    retrieval_mode: str
 
 
 class DocumentOutput(BaseModel):
@@ -107,12 +111,30 @@ class Service:
         self.workflow = RAGWorkflow(
             self.store, LLM(api_key, chat_model, provider),
             top_k=int(os.getenv("RAG_TOP_K", "4")), max_retries=int(os.getenv("RAG_MAX_RETRIES", "2")),
+            web_search=TavilySearch(os.environ["TAVILY_API_KEY"]) if os.getenv("TAVILY_API_KEY") else None,
         )
         self.lock = threading.RLock()
         self.db = sqlite3.connect(data_dir / "feedback.sqlite3", check_same_thread=False)
         self.db.execute("CREATE TABLE IF NOT EXISTS answers (id TEXT PRIMARY KEY, question TEXT NOT NULL)")
         self.db.execute("CREATE TABLE IF NOT EXISTS feedback (answer_id TEXT PRIMARY KEY, rating TEXT NOT NULL, comment TEXT)")
+        self.db.execute("CREATE TABLE IF NOT EXISTS turns (id INTEGER PRIMARY KEY, session_id TEXT NOT NULL, question TEXT NOT NULL, answer TEXT NOT NULL, status TEXT NOT NULL)")
+        self.db.execute("CREATE INDEX IF NOT EXISTS turns_session ON turns(session_id, id)")
         self.db.commit()
+
+    def recent_history(self, session_id: uuid.UUID) -> list[dict]:
+        with self.lock:
+            rows = self.db.execute("SELECT question, answer FROM turns WHERE session_id=? "
+                                   "ORDER BY id DESC LIMIT 4", (str(session_id),)).fetchall()
+        return [{"question": q, "answer": a} for q, a in reversed(rows)]
+
+    def save_turn(self, session_id: uuid.UUID, question: str, answer: str, status: str) -> None:
+        with self.lock:
+            self.db.execute("INSERT INTO turns(session_id, question, answer, status) VALUES (?, ?, ?, ?)",
+                            (str(session_id), question, answer, status))
+            self.db.execute("DELETE FROM turns WHERE session_id=? AND id NOT IN "
+                            "(SELECT id FROM turns WHERE session_id=? ORDER BY id DESC LIMIT 4)",
+                            (str(session_id), str(session_id)))
+            self.db.commit()
 
     def save_answer(self, answer_id: str, question: str) -> None:
         with self.lock:
@@ -159,16 +181,21 @@ def create_app(service_factory=None) -> FastAPI:
 
     @api.post("/query", response_model=QueryOutput)
     def query(data: QueryInput, request: Request):
+        service = request.app.state.service
+        session_id = data.session_id or uuid.uuid4()
         try:
-            result = request.app.state.service.workflow.invoke(data.question)
+            history = service.recent_history(session_id)
+            result = service.workflow.invoke(data.question, history=history)
         except Exception as exc:
             detail = query_error_detail(exc)
             raise HTTPException(status_code=429 if detail["provider_status"] == 429 else 502,
                                 detail=detail) from exc
         answer_id = str(uuid.uuid4())
-        request.app.state.service.save_answer(answer_id, data.question)
+        service.save_answer(answer_id, data.question)
+        service.save_turn(session_id, data.question, result["answer"], result["status"])
         return {"answer_id": answer_id, "answer": result["answer"], "sources": result["sources"],
-                "status": result["status"], "retrieval_attempts": result["attempts"]}
+                "session_id": session_id, "status": result["status"],
+                "retrieval_attempts": result["attempts"], "retrieval_mode": result["retrieval_mode"]}
 
     @api.post("/ingest", status_code=201, response_model=DocumentOutput)
     async def ingest(request: Request):

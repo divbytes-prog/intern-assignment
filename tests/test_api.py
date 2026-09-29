@@ -1,4 +1,5 @@
 import sqlite3
+import uuid
 from fastapi.testclient import TestClient
 
 from app.main import Service, create_app, query_error_detail
@@ -11,6 +12,7 @@ class FakeService:
         self.db = sqlite3.connect(":memory:", check_same_thread=False)
         self.db.execute("CREATE TABLE answers (id TEXT PRIMARY KEY, question TEXT)")
         self.db.execute("CREATE TABLE feedback (answer_id TEXT PRIMARY KEY, rating TEXT, comment TEXT)")
+        self.db.execute("CREATE TABLE turns (id INTEGER PRIMARY KEY, session_id TEXT, question TEXT, answer TEXT, status TEXT)")
         self.workflow = RAGWorkflow(FakeStore([CHUNK]), FakeLLM())
         self.store = self
         self.documents = []
@@ -24,6 +26,15 @@ class FakeService:
 
     def save_answer(self, answer_id, question):
         self.db.execute("INSERT INTO answers VALUES (?, ?)", (answer_id, question))
+        self.db.commit()
+
+    def recent_history(self, session_id):
+        rows = self.db.execute("SELECT question, answer FROM turns WHERE session_id=? ORDER BY id DESC LIMIT 4", (str(session_id),)).fetchall()
+        return [{"question": q, "answer": a} for q, a in reversed(rows)]
+
+    def save_turn(self, session_id, question, answer, status):
+        self.db.execute("INSERT INTO turns(session_id, question, answer, status) VALUES (?, ?, ?, ?)",
+                        (str(session_id), question, answer, status))
         self.db.commit()
 
     def save_feedback(self, data):
@@ -96,10 +107,49 @@ def test_provider_failure_diagnostics_do_not_include_secrets():
             super().__init__()
             self.workflow = self
 
-        def invoke(self, question):
+        def invoke(self, question, history=None):
             raise ProviderError("secret key and request details")
 
     with TestClient(create_app(lambda: FailingService())) as client:
         response = client.post("/query", json={"question": "A valid question?"})
         assert response.status_code == 429
         assert response.json()["detail"] == detail
+
+
+def test_sessions_are_isolated_and_follow_up_is_forwarded():
+    class RecordingWorkflow:
+        def __init__(self):
+            self.calls = []
+
+        def invoke(self, question, history=None):
+            self.calls.append((question, history))
+            return {"answer": "A supported response", "sources": [], "status": "insufficient_context",
+                    "attempts": 1, "retrieval_mode": "none"}
+
+    service = FakeService()
+    service.workflow = RecordingWorkflow()
+    with TestClient(create_app(lambda: service)) as client:
+        first = client.post("/query", json={"question": "First question?"}).json()
+        session = first["session_id"]
+        assert str(uuid.UUID(session)) == session
+        second = client.post("/query", json={"question": "What about this?", "session_id": session}).json()
+        assert second["session_id"] == session
+        assert service.workflow.calls[1][1] == [{"question": "First question?", "answer": "A supported response"}]
+        client.post("/query", json={"question": "Separate session?"})
+        assert service.workflow.calls[2][1] == []
+        assert client.post("/query", json={"question": "A question?", "session_id": "invalid"}).status_code == 422
+
+
+def test_service_keeps_only_four_turns(tmp_path, monkeypatch):
+    from app import main, store
+    from tests.test_store import FakeEmbedding
+    monkeypatch.setattr(store, "Embeddings", FakeEmbedding)
+    monkeypatch.setattr(main, "LLM", lambda *args: FakeLLM())
+    service = Service(tmp_path, "test-key")
+    session_a, session_b = uuid.uuid4(), uuid.uuid4()
+    for i in range(7):
+        service.save_turn(session_a, f"q{i}", f"a{i}", "answered")
+    service.save_turn(session_b, "other", "answer", "answered")
+    assert [row["question"] for row in service.recent_history(session_a)] == ["q3", "q4", "q5", "q6"]
+    assert [row["question"] for row in service.recent_history(session_b)] == ["other"]
+    service.db.close()
