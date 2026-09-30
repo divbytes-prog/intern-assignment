@@ -229,12 +229,13 @@ with a fresh local Chroma index and the configured Groq model:
 python -m scripts.evaluate --output evaluation/latest.md
 ```
 
-The checked-in `evaluation/latest.md` separates **verified evidence** from
-provider-dependent evaluation cases: it records the passing automated regression
-and credentialed live smoke checks already run for this repository, then describes
-the seven-case suite that can be regenerated with a Groq key. No unexecuted case is
-reported as a pass. This is deliberately a compact project regression/evaluation
-set rather than a claim of benchmark-level model accuracy.
+The checked-in `evaluation/latest.md` records the most recent completed
+seven-case live run: 7/7 cases passed on 29 September 2026, including six
+answers with the expected source and one out-of-domain abstention. The
+[GitHub Actions run](https://github.com/divbytes-prog/intern-assignment/actions/runs/36616718545)
+provides the execution record. These results are a
+compact project regression set, not a claim of benchmark-level model accuracy;
+provider behavior may vary in later runs.
 
 ## Design decisions and tradeoffs
 
