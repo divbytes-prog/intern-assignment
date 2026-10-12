@@ -72,7 +72,7 @@
       </div>
     </aside>
   </main>
-  <footer>Local demo · <a href="/docs">API documentation</a> · Web fallback uses official documentation if configured.</footer>
+  <footer>Technical documentation demo · <a href="/docs">API documentation</a> · Web fallback uses official documentation if configured.</footer>
   <script>
     const $ = id => document.getElementById(id);
     let answerId = null;
@@ -153,6 +153,18 @@
       catch (error) { $('upload-status').textContent = error.message; }
       finally { $('upload').disabled = false; }
     });
+    if (location.hostname.endsWith('.vercel.app')) {
+      const uploadForm = $('upload-form');
+      const note = document.createElement('p');
+      note.className = 'muted';
+      note.textContent = 'The public demo uses its bundled documentation. Uploads are available when running locally.';
+      uploadForm.replaceWith(note);
+      fetch('/health').then(r => r.json()).then(data => {
+        if (data.status === 'needs_configuration') {
+          $('status').textContent = 'The site is deployed; the model provider still needs to be configured.';
+        }
+      }).catch(() => {});
+    }
     loadDocuments();
   </script>
 </body>
