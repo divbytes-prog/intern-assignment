@@ -205,8 +205,13 @@ def create_app(service_factory=None) -> FastAPI:
         if key_name is None:
             raise RuntimeError("AI_PROVIDER must be groq, gemini, or openai")
         key = os.getenv(key_name)
-        if service_factory is None and not key:
+        if service_factory is None and not key and not os.getenv("VERCEL"):
             raise RuntimeError(f"Set {key_name} before starting the application")
+        if service_factory is None and not key:
+            # Keep the public site visible until a model key is configured.
+            app.state.service = None
+            yield
+            return
         data_dir = Path(os.getenv("RAG_DATA_DIR", "/tmp/express-docs-rag" if os.getenv("VERCEL") else "./data-local"))
         app.state.service = service_factory() if service_factory else Service(data_dir, key)
         if os.getenv("VERCEL") and service_factory is None and app.state.service.store.collection.count() == 0:
@@ -218,7 +223,7 @@ def create_app(service_factory=None) -> FastAPI:
                 content = (root / "corpus" / doc["file"]).read_text(encoding="utf-8")
                 app.state.service.store.add_document(content, doc["url"], doc["title"])
         yield
-        if hasattr(app.state.service, "db"):
+        if app.state.service is not None and hasattr(app.state.service, "db"):
             app.state.service.db.close()
 
     api = FastAPI(title="Express Docs RAG", version="1.0.0", lifespan=lifespan)
@@ -228,12 +233,14 @@ def create_app(service_factory=None) -> FastAPI:
         return FileResponse(Path(__file__).parent / "static" / "index.html", media_type="text/html")
 
     @api.get("/health")
-    def health():
-        return {"status": "ok"}
+    def health(request: Request):
+        return {"status": "ok" if request.app.state.service is not None else "needs_configuration"}
 
     @api.post("/query", response_model=QueryOutput)
     def query(data: QueryInput, request: Request):
         service = request.app.state.service
+        if service is None:
+            raise HTTPException(status_code=503, detail="The model provider is not configured for this deployment")
         session_id = data.session_id or uuid.uuid4()
         try:
             history = service.recent_history(session_id)
@@ -308,10 +315,15 @@ def create_app(service_factory=None) -> FastAPI:
 
     @api.get("/documents", response_model=DocumentsOutput)
     def documents(request: Request):
-        return {"documents": request.app.state.service.store.list_documents()}
+        service = request.app.state.service
+        if service is None:
+            return {"documents": []}
+        return {"documents": service.store.list_documents()}
 
     @api.post("/feedback", response_model=FeedbackOutput)
     def feedback(data: FeedbackInput, request: Request):
+        if request.app.state.service is None:
+            raise HTTPException(status_code=503, detail="The model provider is not configured for this deployment")
         if data.rating not in {"up", "down"}:
             raise HTTPException(status_code=422, detail="rating must be 'up' or 'down'")
         try:
