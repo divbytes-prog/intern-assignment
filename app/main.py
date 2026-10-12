@@ -131,11 +131,12 @@ class Service:
         provider = os.getenv("AI_PROVIDER", "groq").lower()
         if provider not in {"groq", "gemini", "openai"}:
             raise ValueError("AI_PROVIDER must be groq, gemini, or openai")
-        embedding_provider = os.getenv("EMBEDDING_PROVIDER", "local").lower()
-        if embedding_provider not in {"local", "gemini", "openai"}:
-            raise ValueError("EMBEDDING_PROVIDER must be local, gemini, or openai")
+        embedding_provider = os.getenv("EMBEDDING_PROVIDER", "hash" if os.getenv("VERCEL") else "local").lower()
+        if embedding_provider not in {"local", "hash", "gemini", "openai"}:
+            raise ValueError("EMBEDDING_PROVIDER must be local, hash, gemini, or openai")
         embedding_model = {
             "local": os.getenv("LOCAL_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5"),
+            "hash": "blake2b-lexical-384",
             "gemini": os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-2"),
             "openai": os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
         }[embedding_provider]
@@ -144,10 +145,10 @@ class Service:
             "gemini": os.getenv("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"),
             "openai": os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini"),
         }[provider]
-        embedding_key = None if embedding_provider == "local" else os.getenv(
+        embedding_key = None if embedding_provider in {"local", "hash"} else os.getenv(
             {"gemini": "GEMINI_API_KEY", "openai": "OPENAI_API_KEY"}[embedding_provider]
         )
-        if embedding_provider != "local" and not embedding_key:
+        if embedding_provider not in {"local", "hash"} and not embedding_key:
             raise ValueError(f"Set the {embedding_provider.upper()} embedding API key")
         self.store = DocumentStore(data_dir, embedding_key, embedding_model, embedding_provider)
         self.workflow = RAGWorkflow(
