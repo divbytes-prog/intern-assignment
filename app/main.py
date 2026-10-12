@@ -207,9 +207,16 @@ def create_app(service_factory=None) -> FastAPI:
         key = os.getenv(key_name)
         if service_factory is None and not key:
             raise RuntimeError(f"Set {key_name} before starting the application")
-        app.state.service = service_factory() if service_factory else Service(
-            Path(os.getenv("RAG_DATA_DIR", "./data-local")), key
-        )
+        data_dir = Path(os.getenv("RAG_DATA_DIR", "/tmp/express-docs-rag" if os.getenv("VERCEL") else "./data-local"))
+        app.state.service = service_factory() if service_factory else Service(data_dir, key)
+        if os.getenv("VERCEL") and service_factory is None and app.state.service.store.collection.count() == 0:
+            # Serverless files are temporary. Seed the bundled four-note corpus
+            # whenever a new instance starts with an empty local index.
+            root = Path(__file__).resolve().parents[1]
+            manifest = json.loads((root / "corpus" / "index.json").read_text(encoding="utf-8"))
+            for doc in manifest:
+                content = (root / "corpus" / doc["file"]).read_text(encoding="utf-8")
+                app.state.service.store.add_document(content, doc["url"], doc["title"])
         yield
         if hasattr(app.state.service, "db"):
             app.state.service.db.close()
@@ -246,6 +253,8 @@ def create_app(service_factory=None) -> FastAPI:
 
     @api.post("/ingest", status_code=201, response_model=DocumentOutput)
     async def ingest(request: Request):
+        if os.getenv("VERCEL"):
+            raise HTTPException(status_code=403, detail="Public demo corpus is read-only")
         content_type = request.headers.get("content-type", "").lower()
         service = request.app.state.service
         try:
