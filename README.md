@@ -69,6 +69,23 @@ support checking. The optional Gemini provider retries one short per-minute
 quota error after the suggested delay. Other provider quota limits return
 HTTP 429, and additional retries can cost more requests.
 
+## Hosted website on Vercel
+
+The root `index.py` exposes the existing FastAPI application as a Vercel Python
+Function. The browser interface is served at `/`, and the four bundled notes
+are indexed when a new function instance starts. Configure `AI_PROVIDER=groq`
+and `GROQ_API_KEY` as Vercel project environment variables for a live demo,
+then redeploy. Never commit a key to the repository. The site remains visible
+without a key, but `/query` responds with HTTP 503 until one is configured.
+
+Vercel's function filesystem is temporary. The bundled notes can be rebuilt
+after a cold start, but uploaded documents, SQLite sessions, answers, and
+feedback do not persist between instances. Public `/ingest` is disabled on
+Vercel for that reason; local `/ingest` remains available. For a durable public
+service, move the vector index and session/feedback data to managed persistent
+storage, and add authentication and request rate limits. Cold starts can include
+the local embedding-model download and indexing step.
+
 ## Requirements and setup
 
 - Python 3.11 or newer
