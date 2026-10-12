@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 import threading
 from pathlib import Path
@@ -19,16 +20,38 @@ class Embeddings:
         if provider == "local":
             from fastembed import TextEmbedding
             self.client = TextEmbedding(model_name=model)
+        elif provider == "hash":
+            # Small, deterministic lexical vectors for disk-constrained hosted demos.
+            self.client = None
         elif provider == "gemini":
             self.client = genai.Client(api_key=api_key)
         elif provider == "openai":
             self.client = OpenAI(api_key=api_key)
         else:
-            raise ValueError("Embedding provider must be local, gemini, or openai")
+            raise ValueError("Embedding provider must be local, hash, gemini, or openai")
+
+    @staticmethod
+    def _hash_embedding(text: str) -> list[float]:
+        """Stable 384-dimensional term/character vector; no runtime model download."""
+        tokens = re.findall(r"[a-z0-9_]+", text.lower())
+        vector = [0.0] * 384
+        for token in tokens:
+            features = [(token, 1.0)]
+            if len(token) >= 5:
+                features.extend((f"tri:{token[i:i + 3]}", 0.2) for i in range(len(token) - 2))
+            for feature, weight in features:
+                digest = hashlib.blake2b(feature.encode("utf-8"), digest_size=8).digest()
+                slot = int.from_bytes(digest[:4], "little") % len(vector)
+                sign = 1 if digest[4] & 1 else -1
+                vector[slot] += sign * weight
+        length = math.sqrt(sum(value * value for value in vector))
+        return [value / length for value in vector] if length else vector
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         if self.provider == "local":
             vectors = [vector.tolist() for vector in self.client.embed(texts)]
+        elif self.provider == "hash":
+            vectors = [self._hash_embedding(text) for text in texts]
         elif self.provider == "gemini":
             # Embedding 2 aggregates a plain list of strings into ONE vector.
             # Separate Content objects request one vector for each chunk.
