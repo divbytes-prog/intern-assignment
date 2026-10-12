@@ -83,8 +83,7 @@ after a cold start, but uploaded documents, SQLite sessions, answers, and
 feedback do not persist between instances. Public `/ingest` is disabled on
 Vercel for that reason; local `/ingest` remains available. For a durable public
 service, move the vector index and session/feedback data to managed persistent
-storage, and add authentication and request rate limits. Cold starts can include
-the local embedding-model download and indexing step.
+storage, and add authentication and request rate limits. The hosted demo uses deterministic 384-dimensional lexical hashing vectors to fit the\nserverless disk limit; it still stores vectors in Chroma and runs the same\nLangGraph grading and grounding workflow. These vectors are less semantic than\nthe local FastEmbed model. Local runs continue to use FastEmbed by default.\nSet `EMBEDDING_PROVIDER=hash` locally to reproduce hosted retrieval. Cold starts\nrebuild the four-note index.
 
 ## Requirements and setup
 
