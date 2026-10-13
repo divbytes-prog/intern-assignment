@@ -298,3 +298,23 @@ def test_bad_initial_citations_can_be_repaired_with_valid_sources():
     assert result["revision_attempts"] == 1
     assert result["sources"][0]["marker"] == "S1"
     assert "S99" not in result["answer"]
+
+
+def test_named_topic_prefers_direct_document_over_incidental_mention():
+    incidental = dict(CHUNK, id="body:0", title="FastAPI request body",
+                      text="A request body guide briefly mentions path parameters.")
+    direct = dict(CHUNK, id="path:0", title="FastAPI path parameters")
+    result = RAGWorkflow(FakeStore([incidental, direct]), FakeLLM()).invoke(
+        "Explain FastAPI path parameters"
+    )
+    assert [chunk["id"] for chunk in result["relevant"]] == ["path:0"]
+    assert [source["chunk_id"] for source in result["sources"]] == ["path:0"]
+
+
+def test_comparison_keeps_both_named_topics():
+    path = dict(CHUNK, id="path:0", title="FastAPI path parameters")
+    body = dict(CHUNK, id="body:0", title="FastAPI request body")
+    result = RAGWorkflow(FakeStore([path, body]), FakeLLM()).invoke(
+        "Compare FastAPI path parameters and request body"
+    )
+    assert [chunk["id"] for chunk in result["relevant"]] == ["path:0", "body:0"]
