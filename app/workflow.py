@@ -163,7 +163,7 @@ class RAGWorkflow:
         numbered = [dict(chunk, marker=f"S{i + 1}") for i, chunk in enumerate(state["relevant"])]
         context = "\n\n".join(f"[{c['marker']}] {c['title']}\n{c['text']}" for c in numbered)
         result = self.llm.json(
-            "The previous draft had invalid citations or failed its factual support check. Return JSON with answer and "
+            "The previous draft failed its factual support check or had invalid citations. Return JSON with answer and "
             "citations (list of S markers). Answer in one or two sentences using ONLY explicit "
             "facts in the excerpts. Place [S1]-style citations beside each factual sentence. "
             "If the exact question cannot be answered, return answer='I do not know based on "
