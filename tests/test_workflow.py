@@ -75,7 +75,7 @@ def test_split_preserves_text_and_limits_chunks():
 def test_invalid_model_citations_do_not_leak():
     class BadLLM(FakeLLM):
         def json(self, system, user):
-            if "Answer ONLY" in system:
+            if "Answer ONLY" in system or "previous draft failed" in system:
                 return {"answer": "Unsupported claim [S99].", "citations": ["S99"]}
             return super().json(system, user)
 
@@ -130,7 +130,7 @@ def test_separate_sources_still_fail_if_support_check_rejects():
 def test_malformed_citation_list_abstains_instead_of_crashing():
     class BadLLM(FakeLLM):
         def json(self, system, user):
-            if "Answer ONLY" in system:
+            if "Answer ONLY" in system or "previous draft failed" in system:
                 return {"answer": "An unsupported claim [S1].", "citations": [{"marker": "S1"}]}
             return super().json(system, user)
 
@@ -282,3 +282,19 @@ def test_unsupported_revision_abstains_without_loop():
     assert llm.revisions == 1
     assert result["status"] == "insufficient_context"
     assert result["sources"] == []
+
+
+def test_bad_initial_citations_can_be_repaired_with_valid_sources():
+    class RepairableLLM(FakeLLM):
+        def json(self, system, user):
+            if "Answer ONLY" in system:
+                return {"answer": "Declare item_id: int [S99].", "citations": ["S99"]}
+            return super().json(system, user)
+
+    result = RAGWorkflow(FakeStore([CHUNK]), RepairableLLM()).invoke(
+        "How do I validate item_id?"
+    )
+    assert result["status"] == "answered"
+    assert result["revision_attempts"] == 1
+    assert result["sources"][0]["marker"] == "S1"
+    assert "S99" not in result["answer"]
