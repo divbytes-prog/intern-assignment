@@ -81,23 +81,21 @@ def test_invalid_model_citations_do_not_leak():
     assert result["status"] == "insufficient_context"
 
 
-def test_missing_inline_markers_get_one_model_repair():
+def test_valid_sources_do_not_require_a_second_generation_call():
     class OmittedInline(FakeLLM):
-        calls = 0
+        generation_calls = 0
 
         def json(self, system, user):
             if "Answer ONLY" in system:
+                self.generation_calls += 1
                 return {"answer": "Declare item_id: int on the route function.", "citations": ["S1"]}
-            if "Each factual claim in answer MUST" in system:
-                self.calls += 1
-                return {"answer": "Declare item_id: int on the route function [S1].",
-                        "citations": ["S1"]}
             return super().json(system, user)
 
     llm = OmittedInline()
     result = RAGWorkflow(FakeStore([CHUNK]), llm).invoke("How do I validate item_id?")
     assert result["status"] == "answered"
-    assert llm.calls == 1
+    assert result["sources"][0]["marker"] == "S1"
+    assert llm.generation_calls == 1
 
 
 def test_unrepaired_inline_markers_use_separate_verified_sources():
