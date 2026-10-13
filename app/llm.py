@@ -21,7 +21,8 @@ class LLM:
         if provider == "gemini":
             self.client = genai.Client(api_key=api_key)
         elif provider == "groq":
-            self.client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
+            self.client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1",
+                                 max_retries=0, timeout=18.0)
         elif provider == "openai":
             self.client = OpenAI(api_key=api_key)
         else:
