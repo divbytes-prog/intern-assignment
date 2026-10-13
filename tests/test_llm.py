@@ -63,3 +63,24 @@ def test_groq_uses_compatible_json_api(monkeypatch):
     assert llm.json("Return JSON", "ping") == {"ok": True}
     assert settings["client"]["base_url"] == "https://api.groq.com/openai/v1"
     assert settings["request"]["response_format"] == {"type": "json_object"}
+
+
+def test_groq_uses_one_backup_model_on_rate_limit(monkeypatch):
+    calls = []
+
+    class FakeRateLimitError(Exception):
+        pass
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            calls.append(kwargs["model"])
+            if len(calls) == 1:
+                raise FakeRateLimitError("too many requests")
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='{"ok": true}'))])
+
+    monkeypatch.setattr(module, "RateLimitError", FakeRateLimitError)
+    monkeypatch.setattr(module, "OpenAI", lambda **kwargs: SimpleNamespace(
+        chat=SimpleNamespace(completions=FakeCompletions())))
+    client = module.LLM("test-key", "openai/gpt-oss-20b", "groq")
+    assert client.json("Return JSON", "ping") == {"ok": True}
+    assert calls == ["openai/gpt-oss-20b", "llama-3.1-8b-instant"]
