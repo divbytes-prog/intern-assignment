@@ -153,7 +153,7 @@ class Service:
         self.store = DocumentStore(data_dir, embedding_key, embedding_model, embedding_provider)
         self.workflow = RAGWorkflow(
             self.store, LLM(api_key, chat_model, provider),
-            top_k=int(os.getenv("RAG_TOP_K", "4")), max_retries=int(os.getenv("RAG_MAX_RETRIES", "2")),
+            top_k=int(os.getenv("RAG_TOP_K", "4")), max_retries=int(os.getenv("RAG_MAX_RETRIES", "1" if os.getenv("VERCEL") else "2")),
             web_search=TavilySearch(os.environ["TAVILY_API_KEY"]) if os.getenv("TAVILY_API_KEY") else None,
         )
         self.lock = threading.RLock()
