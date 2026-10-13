@@ -55,6 +55,10 @@ class RAGWorkflow:
         self.graph = graph.compile()
 
     def analyze(self, state: RAGState) -> dict:
+        if not state["history"]:
+            # Standalone questions need no model call for query rewriting.
+            return {"standalone_question": state["question"],
+                    "search_query": state["question"][:500], "query_type": "conceptual"}
         context = "\n".join(f"Q: {turn['question'][:500]}\nA: {turn['answer'][:800]}"
                             for turn in state["history"][-4:])
         result = self.llm.json(
@@ -136,31 +140,14 @@ class RAGWorkflow:
         claimed = result.get("citations")
         allowed = {c["marker"]: c for c in numbered}
         markers = set(re.findall(r"\[(S\d+)\]", answer))
-        if (answer and not markers and isinstance(claimed, list) and claimed and
-                all(isinstance(marker, str) and marker in allowed for marker in claimed)):
-            # Some JSON-mode models put valid markers only in the citations
-            # array. Ask once for an answer with inline markers; never add them
-            # mechanically because their placement is a factual claim.
-            result = self.llm.json(
-                "Return JSON with answer and citations. Each factual claim in answer MUST "
-                "have an inline citation immediately after it in square brackets, e.g. "
-                "'FastAPI parses integers [S1].'. Use only listed excerpts and markers. "
-                "If they do not support the answer, return answer='I do not know based on "
-                "the indexed documents.' and citations=[].",
-                f"QUESTION:\n{state['standalone_question']}\n\nEXCERPTS:\n{context}\n\n"
-                f"PREVIOUS ANSWER (untrusted draft):\n{answer[:2000]}",
-            )
-            answer = str(result.get("answer") or "").strip()
-            claimed = result.get("citations")
-            markers = set(re.findall(r"\[(S\d+)\]", answer))
         if (not answer or answer.lower().startswith("i do not know") or
                 not isinstance(claimed, list) or not claimed or
                 not all(isinstance(marker, str) for marker in claimed) or
                 not set(claimed) <= allowed.keys() or
                 (markers and markers != set(claimed))):
             return self.fallback(state)
-        # The API's sources list is an explicit reference when a JSON-mode
-        # model cannot render markers inline after the bounded repair.
+        # A valid sources list is an explicit reference when the model omits
+        # inline markers. Verification checks the claims against those sources.
         return {"answer": answer, "sources": [{"marker": m, "title": allowed[m]["title"],
                  "source": allowed[m]["source"], "chunk_id": allowed[m]["id"]}
                  for m in sorted(set(claimed))], "status": "answered"}
