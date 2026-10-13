@@ -151,7 +151,7 @@ class RAGWorkflow:
                 not all(isinstance(marker, str) for marker in claimed) or
                 not set(claimed) <= allowed.keys() or
                 (markers and markers != set(claimed))):
-            return self.fallback(state)
+            return {"answer": "", "sources": [], "status": "invalid_generation"}
         # A valid sources list is an explicit reference when the model omits
         # inline markers. Verification checks the claims against those sources.
         return {"answer": answer, "sources": [{"marker": m, "title": allowed[m]["title"],
@@ -159,11 +159,11 @@ class RAGWorkflow:
                  for m in sorted(set(claimed))], "status": "answered"}
 
     def revise(self, state: RAGState) -> dict:
-        """One bounded revision after an unsupported draft; keep citation checks."""
+        """One bounded revision after an invalid or unsupported draft."""
         numbered = [dict(chunk, marker=f"S{i + 1}") for i, chunk in enumerate(state["relevant"])]
         context = "\n\n".join(f"[{c['marker']}] {c['title']}\n{c['text']}" for c in numbered)
         result = self.llm.json(
-            "The previous draft failed its factual support check. Return JSON with answer and "
+            "The previous draft had invalid citations or failed its factual support check. Return JSON with answer and "
             "citations (list of S markers). Answer in one or two sentences using ONLY explicit "
             "facts in the excerpts. Place [S1]-style citations beside each factual sentence. "
             "If the exact question cannot be answered, return answer='I do not know based on "
@@ -208,7 +208,7 @@ class RAGWorkflow:
     def route_verification(self, state: RAGState) -> Literal["done", "revise", "fallback"]:
         if state["verified"]:
             return "done"
-        return "revise" if state["status"] == "answered" and state["revision_attempts"] == 0 else "fallback"
+        return "revise" if state["status"] in {"answered", "invalid_generation"} and state["revision_attempts"] == 0 else "fallback"
 
     def fallback(self, state: RAGState) -> dict:
         reason = ("no_relevant_chunks" if not state["relevant"] else
