@@ -35,7 +35,7 @@ additional Markdown, text, HTML, or supported documentation URLs.
 | Ingestion, chunking, embeddings, vector store | `scripts/seed.py`, `app/ingest.py`, and `app/store.py`; local FastEmbed vectors and persistent Chroma |
 | Four API endpoints | `POST /query`, `POST /ingest`, `GET /documents`, `POST /feedback` |
 | Grounded response with citations | Generation uses only graded chunks; source markers or the explicit `sources` list identify cited documents, and a separate LLM node reviews support |
-| Hallucination check (bonus) | Citation marker validation plus a separate answer-support LLM node; unsupported answers abstain |
+| Hallucination check (bonus) | Citation validation and an answer-support LLM node; an unsupported draft is revised once and checked again before abstaining |
 | Web search fallback (bonus) | After local retries, optional Tavily search limited to three official documentation hosts; results are graded and verified like local chunks |
 | Conversation memory (bonus) | UUID session ID, four recent turns in SQLite, follow-up query resolution; only retrieved sources can support an answer |
 | Streamlit frontend (bonus) | `streamlit_app.py` provides chat, citations, upload, indexed documents, feedback, and new conversation |
@@ -51,7 +51,9 @@ flowchart TD
   D -->|Relevant| E["Grounded answer + source IDs"]
   E --> H["LLM support check"]
   H -->|Supported| I["Return answer and sources"]
-  H -->|Unsupported| G
+  H -->|Unsupported, first check| R["Revise with cited excerpts"]
+  R --> H
+  H -->|Still unsupported| G
   D -->|None, retries left| F["Rewrite query"]
   F --> C
   D -->|Retry limit reached, Tavily configured| W["Search official docs on web"]
@@ -62,12 +64,14 @@ flowchart TD
 The `RAGState` in `app/workflow.py` carries the original and resolved follow-up question, short session context, current
 search query, query type, attempt count, retrieved chunks, filtered relevant
 chunks, answer, citations, verification result, and status. One initial local retrieval plus two retries
-is the default maximum. A failed relevance check never reaches generation.
-The default Groq workflow uses four chat calls on a successful
-single-pass question: query analysis, batch grading, answer generation, and
-support checking. The optional Gemini provider retries one short per-minute
-quota error after the suggested delay. Other provider quota limits return
-HTTP 429, and additional retries can cost more requests.
+is the local default maximum; the hosted demo uses one retry to conserve free-plan model calls. A failed relevance check never reaches generation.
+A standalone, single-pass Groq question normally uses three model calls:
+batch grading, answer generation, and support checking. Follow-up resolution,
+retrieval rewrites, or one bounded revision use additional calls. The optional Gemini provider retries one short per-minute
+quota error after the suggested delay. If Groq rate limits the primary
+`openai/gpt-oss-20b` model, the app tries `llama-3.1-8b-instant` once. Set
+`GROQ_FALLBACK_MODEL` to another supported model or to the same primary model
+to disable that fallback. If both are rate limited, the API returns HTTP 429.
 
 ## Hosted website on Vercel
 
@@ -83,7 +87,12 @@ after a cold start, but uploaded documents, SQLite sessions, answers, and
 feedback do not persist between instances. Public `/ingest` is disabled on
 Vercel for that reason; local `/ingest` remains available. For a durable public
 service, move the vector index and session/feedback data to managed persistent
-storage, and add authentication and request rate limits. The hosted demo uses deterministic 384-dimensional lexical hashing vectors to fit the\nserverless disk limit; it still stores vectors in Chroma and runs the same\nLangGraph grading and grounding workflow. These vectors are less semantic than\nthe local FastEmbed model. Local runs continue to use FastEmbed by default.\nSet `EMBEDDING_PROVIDER=hash` locally to reproduce hosted retrieval. Cold starts\nrebuild the four-note index.
+storage, and add authentication and request rate limits. The hosted demo uses deterministic 384-dimensional lexical hashing vectors to fit the
+serverless disk limit; it still stores vectors in Chroma and runs the same
+LangGraph grading and grounding workflow. These vectors are less semantic than
+the local FastEmbed model. Local runs continue to use FastEmbed by default.
+Set `EMBEDDING_PROVIDER=hash` locally to reproduce hosted retrieval. Cold starts
+rebuild the four-note index.
 
 ## Requirements and setup
 
@@ -107,7 +116,7 @@ The `.env` file is excluded from Git; keep your key out of GitHub and chat messa
 Groq supplies the language model; FastEmbed's `BAAI/bge-small-en-v1.5` supplies
 384-dimensional embeddings on your machine. You can optionally set
 `AI_PROVIDER=gemini` or `AI_PROVIDER=openai` with the corresponding key.
-`EMBEDDING_PROVIDER` can separately be `local`, `gemini`, or `openai`.
+`EMBEDDING_PROVIDER` can separately be `local`, `hash`, `gemini`, or `openai`.
 Use a **fresh `RAG_DATA_DIR`** when changing embedding models or providers;
 vector dimensions and meaning may differ. The new default `./data-local`
 keeps the old Gemini index in `./data` separate. The first seed downloads
