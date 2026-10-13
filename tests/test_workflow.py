@@ -28,6 +28,8 @@ class FakeLLM:
             return {"search_query": "route URL variable type validation"}
         if "Answer ONLY" in system:
             return {"answer": "Declare item_id: int on the route function [S1].", "citations": ["S1"]}
+        if "previous draft failed" in system:
+            return {"answer": "Declare item_id: int on the route function [S1].", "citations": ["S1"]}
         if "Check whether EVERY" in system:
             return {"supported": self.supported}
         raise AssertionError("Unexpected model call")
@@ -241,3 +243,42 @@ def test_follow_up_expands_for_retrieval_but_history_is_not_evidence():
         "How about integers?", [{"question": "What are path parameters?", "answer": "A route variable."}])
     assert store.calls == ["FastAPI integer path parameters"]
     assert result["status"] == "answered"
+
+
+def test_unsupported_draft_is_revised_once_and_reverified():
+    class RevisingLLM(FakeLLM):
+        checks = 0
+        revisions = 0
+
+        def json(self, system, user):
+            if "previous draft failed" in system:
+                self.revisions += 1
+                return {"answer": "An integer annotation parses the path value [S1].",
+                        "citations": ["S1"]}
+            if "Check whether EVERY" in system:
+                self.checks += 1
+                return {"supported": self.checks == 2}
+            return super().json(system, user)
+
+    llm = RevisingLLM()
+    result = RAGWorkflow(FakeStore([CHUNK]), llm).invoke("How does FastAPI validate a path parameter?")
+    assert result["status"] == "answered"
+    assert result["revision_attempts"] == 1
+    assert llm.revisions == 1 and llm.checks == 2
+    assert result["sources"][0]["marker"] == "S1"
+
+
+def test_unsupported_revision_abstains_without_loop():
+    class RejectingLLM(FakeLLM):
+        revisions = 0
+
+        def json(self, system, user):
+            if "previous draft failed" in system:
+                self.revisions += 1
+            return super().json(system, user)
+
+    llm = RejectingLLM(supported=False)
+    result = RAGWorkflow(FakeStore([CHUNK]), llm).invoke("How does FastAPI validate item_id?")
+    assert llm.revisions == 1
+    assert result["status"] == "insufficient_context"
+    assert result["sources"] == []
