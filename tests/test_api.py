@@ -131,6 +131,12 @@ def test_provider_failure_diagnostics_do_not_include_secrets():
     assert detail == {"error": "quota_or_rate_limit", "provider_status": 429}
     assert "secret" not in str(detail)
 
+    class GroqStyleError(Exception):
+        code = "rate_limit_exceeded"
+        status_code = 429
+
+    assert query_error_detail(GroqStyleError("secret")) == detail
+
     class FailingService(FakeService):
         def __init__(self):
             super().__init__()
