@@ -30,9 +30,11 @@ def query_error_detail(exc: Exception) -> dict:
     status = None
     current: BaseException | None = exc
     while current is not None:
-        code = getattr(current, "code", None) or getattr(current, "status_code", None)
-        if isinstance(code, int) and 400 <= code < 600:
-            status = code
+        for code in (getattr(current, "status_code", None), getattr(current, "code", None)):
+            if isinstance(code, int) and 400 <= code < 600:
+                status = code
+                break
+        if status is not None:
             break
         current = current.__cause__
     category = {
