@@ -137,6 +137,7 @@
           for (const step of data.trace) { const li = document.createElement('li'); li.textContent = step; $('trace-steps').appendChild(li); }
           $('trace').style.display = 'block';
         }
+        if (data.failure_reason) { const li = document.createElement('li'); li.textContent = `Reason: ${data.failure_reason}`; $('trace-steps').appendChild(li); $('trace').style.display = 'block'; }
         $('feedback').style.display = 'block';
       } catch (error) { $('answer').textContent = error.name === 'AbortError' ? 'The request took too long. Please try again.' : error.message; $('answer').classList.add('error'); item($('sources'), 'No sources available because the request failed.'); $('status').textContent = 'Question was not answered.'; }
       finally { clearTimeout(timer); $('ask').disabled = false; }
