@@ -309,6 +309,10 @@ def test_named_topic_prefers_direct_document_over_incidental_mention():
     )
     assert [chunk["id"] for chunk in result["relevant"]] == ["path:0"]
     assert [source["chunk_id"] for source in result["sources"]] == ["path:0"]
+    singular = RAGWorkflow(FakeStore([incidental, direct]), FakeLLM()).invoke(
+        "Explain a FastAPI path parameter"
+    )
+    assert [chunk["id"] for chunk in singular["relevant"]] == ["path:0"]
 
 
 def test_comparison_keeps_both_named_topics():
