@@ -110,9 +110,15 @@ class RAGWorkflow:
                     if grades.get(str(i)) is True]
         # A note about another feature may mention the named topic in passing.
         # If one or more titles directly match the question, prefer those chunks.
-        question_words = set(re.findall(r"[a-z0-9]+", state["standalone_question"].lower()))
+        def normalize_word(word: str) -> str:
+            if word.endswith("ies") and len(word) > 5:
+                return word[:-3] + "y"
+            return word[:-1] if word.endswith("s") and len(word) > 4 else word
+        question_words = {normalize_word(word) for word in
+                          re.findall(r"[a-z0-9]+", state["standalone_question"].lower())}
         def title_matches(chunk: dict) -> bool:
-            title_words = set(re.findall(r"[a-z0-9]+", chunk["title"].lower()))
+            title_words = {normalize_word(word) for word in
+                           re.findall(r"[a-z0-9]+", chunk["title"].lower())}
             topic_words = title_words - {"fastapi", "python", "documentation", "docs", "api"}
             return bool(topic_words) and topic_words <= question_words
         direct = [chunk for chunk in relevant if title_matches(chunk)]
