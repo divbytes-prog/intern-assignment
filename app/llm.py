@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
@@ -28,6 +29,7 @@ class LLM:
         else:
             raise ValueError("AI_PROVIDER must be groq, gemini, or openai")
         self.model = model
+        self.fallback_model = os.getenv('GROQ_FALLBACK_MODEL', 'llama-3.1-8b-instant') if provider == 'groq' else None
 
     def json(self, system: str, user: str) -> dict:
         if self.provider == "gemini":
@@ -56,10 +58,21 @@ class LLM:
             if not isinstance(parsed, dict):
                 raise ModelResponseError("Model must return a JSON object")
             return parsed
-        response = self.client.chat.completions.create(
-            model=self.model, temperature=0, response_format={"type": "json_object"},
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-        )
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model, temperature=0, response_format={"type": "json_object"},
+                messages=messages,
+            )
+        except RateLimitError:
+            # Groq applies per-model limits. A second free model can keep the
+            # demo useful during a short burst; never retry the same 429 loop.
+            if not self.fallback_model or self.fallback_model == self.model:
+                raise
+            response = self.client.chat.completions.create(
+                model=self.fallback_model, temperature=0, response_format={"type": "json_object"},
+                messages=messages,
+            )
         parsed = json.loads(response.choices[0].message.content or "{}")
         if not isinstance(parsed, dict):
             raise ModelResponseError("Model must return a JSON object")
