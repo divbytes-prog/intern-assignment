@@ -159,20 +159,20 @@ class RAGWorkflow:
     def revise(self, state: RAGState) -> dict:
         """One bounded revision after an unsupported draft; keep citation checks."""
         numbered = [dict(chunk, marker=f"S{i + 1}") for i, chunk in enumerate(state["relevant"])]
-        context = "\\n\\n".join(f"[{c['marker']}] {c['title']}\\n{c['text']}" for c in numbered)
+        context = "\n\n".join(f"[{c['marker']}] {c['title']}\n{c['text']}" for c in numbered)
         result = self.llm.json(
             "The previous draft failed its factual support check. Return JSON with answer and "
             "citations (list of S markers). Answer in one or two sentences using ONLY explicit "
             "facts in the excerpts. Place [S1]-style citations beside each factual sentence. "
             "If the exact question cannot be answered, return answer='I do not know based on "
             "the indexed documents.' and citations=[].",
-            f"QUESTION:\\n{state['standalone_question']}\\n\\nEXCERPTS:\\n{context}\\n\\n"
-            f"REJECTED DRAFT:\\n{state['answer'][:1500]}",
+            f"QUESTION:\n{state['standalone_question']}\n\nEXCERPTS:\n{context}\n\n"
+            f"REJECTED DRAFT:\n{state['answer'][:1500]}",
         )
         answer = str(result.get("answer") or "").strip()
         claimed = result.get("citations")
         allowed = {c["marker"]: c for c in numbered}
-        markers = set(re.findall(r"\\[(S\\d+)\\]", answer))
+        markers = set(re.findall(r"\[(S\d+)\]", answer))
         if (not answer or answer.lower().startswith("i do not know") or
                 not isinstance(claimed, list) or not claimed or
                 not all(isinstance(marker, str) and marker in allowed for marker in claimed) or
