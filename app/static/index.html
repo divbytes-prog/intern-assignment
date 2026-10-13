@@ -79,7 +79,7 @@
     let sessionId = null;
     $('new-session').addEventListener('click', () => { sessionId = null; answerId = null; $('question').value = ''; $('answer').textContent = ''; $('sources').replaceChildren(); item($('sources'), 'Sources will appear after an answer.'); $('trace').style.display = 'none'; $('trace').open = false; $('trace-steps').replaceChildren(); $('feedback').style.display = 'none'; $('feedback-status').textContent = ''; $('status').textContent = 'New conversation started.'; });
     const errorMessages = {
-      quota_or_rate_limit: 'Model quota reached. Please try again later.',
+      quota_or_rate_limit: 'Groq is temporarily rate limiting requests. Please wait a minute and try again.',
       invalid_api_key: 'The configured model API key is invalid.',
       model_access_denied: 'The configured model does not allow this request.',
       model_not_found: 'The configured model could not be found.',
@@ -124,8 +124,10 @@
       $('ask').disabled = true; $('status').textContent = 'Checking the documents…';
       $('answer').textContent = ''; $('answer').classList.remove('error');
       $('sources').replaceChildren(); $('trace').style.display = 'none'; $('trace').open = false; $('trace-steps').replaceChildren(); $('feedback').style.display = 'none'; $('feedback-status').textContent = ''; answerId = null;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 45000);
       try {
-        const data = await jsonResponse(await fetch('/query', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({question: $('question').value, session_id: sessionId})}));
+        const data = await jsonResponse(await fetch('/query', {method: 'POST', headers: {'Content-Type': 'application/json'}, signal: controller.signal, body: JSON.stringify({question: $('question').value, session_id: sessionId})}));
         sessionId = data.session_id;
         $('answer').textContent = data.answer; answerId = data.answer_id;
         $('status').textContent = `${data.retrieval_attempts} local attempt${data.retrieval_attempts === 1 ? '' : 's'} · ${data.retrieval_mode} source`;
@@ -136,8 +138,8 @@
           $('trace').style.display = 'block';
         }
         $('feedback').style.display = 'block';
-      } catch (error) { $('answer').textContent = error.message; $('answer').classList.add('error'); item($('sources'), 'No sources available because the request failed.'); $('status').textContent = 'Please try again.'; }
-      finally { $('ask').disabled = false; }
+      } catch (error) { $('answer').textContent = error.name === 'AbortError' ? 'The request took too long. Please try again.' : error.message; $('answer').classList.add('error'); item($('sources'), 'No sources available because the request failed.'); $('status').textContent = 'Question was not answered.'; }
+      finally { clearTimeout(timer); $('ask').disabled = false; }
     });
     $('feedback').addEventListener('click', async event => {
       const rating = event.target.dataset.rating;
