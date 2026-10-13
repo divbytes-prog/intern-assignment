@@ -106,8 +106,17 @@ class RAGWorkflow:
         grades = result.get("grades", result)
         if not isinstance(grades, dict):
             grades = {}
-        return {"relevant": [chunk for i, chunk in enumerate(state["retrieved"])
-                             if grades.get(str(i)) is True]}
+        relevant = [chunk for i, chunk in enumerate(state["retrieved"])
+                    if grades.get(str(i)) is True]
+        # A note about another feature may mention the named topic in passing.
+        # If one or more titles directly match the question, prefer those chunks.
+        question_words = set(re.findall(r"[a-z0-9]+", state["standalone_question"].lower()))
+        def title_matches(chunk: dict) -> bool:
+            title_words = set(re.findall(r"[a-z0-9]+", chunk["title"].lower()))
+            topic_words = title_words - {"fastapi", "python", "documentation", "docs", "api"}
+            return bool(topic_words) and topic_words <= question_words
+        direct = [chunk for chunk in relevant if title_matches(chunk)]
+        return {"relevant": direct or relevant}
 
     def route(self, state: RAGState) -> Literal["generate", "rewrite", "fallback", "web_search"]:
         if state["relevant"]:
